@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/newton-miku/ApexQbot/tools"
+	"github.com/newton-miku/apexQQbot/tools"
 	botlog "github.com/tencent-connect/botgo/log"
 	"golang.org/x/image/draw"
 )

@@ -1,11 +1,11 @@
-module github.com/newton-miku/ApexQbot
+module github.com/newton-miku/apexQQbot
 
 go 1.23.0
 
 toolchain go1.24.3
 
 require (
-	github.com/tencent-connect/botgo v0.1.7
+	github.com/tencent-connect/botgo v0.2.1
 	golang.org/x/image v0.28.0
 	gopkg.in/yaml.v3 v3.0.1
 )

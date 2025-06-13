@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/newton-miku/ApexQbot/apexapi"
+	"github.com/newton-miku/apexQQbot/apexapi"
 	"github.com/tencent-connect/botgo/log"
 )
 

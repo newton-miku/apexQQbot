@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/newton-miku/ApexQbot/apexapi"
+	"github.com/newton-miku/apexQQbot/apexapi"
 	"github.com/tencent-connect/botgo/dto"
 	botlog "github.com/tencent-connect/botgo/log"
 	"github.com/tencent-connect/botgo/openapi"
