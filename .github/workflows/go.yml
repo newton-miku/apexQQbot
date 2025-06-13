@@ -28,7 +28,10 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Build
-      run: go build -o $REPO_NAME
+      run: |
+        # 获取当前仓库的名称
+        REPO_NAME=$(basename $(pwd))
+        go build -v -o $REPO_NAME
 
     - name: Create release artifact
       run: |
