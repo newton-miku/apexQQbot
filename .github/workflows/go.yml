@@ -13,10 +13,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5.5.0
       with:
-        go-version: '1.24'
+        go-version: '^1.24'
 
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4.2.2
 
     - name: Cache go module
       uses: actions/cache@v4.2.3
@@ -27,23 +27,11 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Build
-      run: |
-        # 获取当前仓库的名称
-        REPO_NAME=$(basename $(pwd))
-        go build -v -o $REPO_NAME
-
-    - name: Create release artifact
-      run: |
-        # 获取当前仓库的名称
-        REPO_NAME=$(basename $(pwd))
-        # 创建一个临时目录用于存放发布文件
-        mkdir -p release
-        # 将编译后的二进制文件复制到临时目录
-        cp $REPO_NAME release/
-        # 将 conf 文件夹和 asset 文件夹复制到临时目录
-        cp -r conf asset release/
-        # 打包临时目录为 tar.gz 文件
-        tar -czvf $REPO_NAME.tar.gz -C release .
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+          NAME: nali
+          BINDIR: bin
+      run: make -j releases
 
     - name: Release
       uses: softprops/action-gh-release@v2.3.2
