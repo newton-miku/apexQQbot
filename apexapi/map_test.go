@@ -20,7 +20,7 @@ func TestGetMapRotate(t *testing.T) {
 	}
 
 	confPath := filepath.Join(basePath, "conf", "config.yaml")
-	apexapi.LoadConfig(confPath)
+	apexapi.StartLoadConfig(confPath)
 	mapInfo, err := apexapi.GetMapRotate()
 	if err != nil {
 		t.Fatal(err)

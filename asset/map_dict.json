@@ -24,5 +24,8 @@
     "freedm_gungame_skulltown": "骷髅镇(子弹时间)",
     "freedm_gungame_estates": "不动产(子弹时间)",
     "freedm_tdm_phase_runner": "相位穿梭器(团队死斗)",
-    "freedm_swat_phase_runner": "相位穿梭器(死亡之眼-无护盾)"
+    "freedm_swat_phase_runner": "相位穿梭器(死亡之眼-无护盾)",
+    "freedm_tdm_thunderdome": "雷霆堡(团队死斗)",
+    "control_thunderdome":  "雷霆堡(控制)",
+    "freedm_gungame_mounment": "纪念碑(子弹时间)"
 }

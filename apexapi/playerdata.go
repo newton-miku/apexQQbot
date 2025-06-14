@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	"github.com/tencent-connect/botgo/log"
 )
 
 type PlayerBindingData struct {
@@ -26,13 +24,6 @@ const bindingFile = "conf/eaid_bindings.json"
 
 var Players = PlayerData{
 	data: make(map[string]PlayerBindingData),
-}
-
-func init() {
-	err := Players.loadPlayerData()
-	if err != nil {
-		log.Errorf("load player data failed, err:%v\n", err)
-	}
 }
 
 func (p *PlayerData) GetData() map[string]PlayerBindingData {

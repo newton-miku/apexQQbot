@@ -1,4 +1,4 @@
-package main
+package apexQQbot
 
 import (
 	"context"
@@ -181,6 +181,9 @@ func (p Processor) sendGroupImgReply(ctx context.Context, groupID string, toCrea
 func (p Processor) sendC2CReply(ctx context.Context, userID string, toCreate dto.APIMessage) error {
 	log.Printf("EVENT ID:%v", toCreate.GetEventID())
 	if _, err := p.api.PostC2CMessage(ctx, userID, toCreate); err != nil {
+		if strings.Contains(err.Error(), "消息被去重，请检查请求msgseq") {
+			return nil
+		}
 		log.Println(err)
 		return err
 	}

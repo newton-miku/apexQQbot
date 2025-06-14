@@ -1,4 +1,4 @@
-package main
+package apexQQbot
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/newton-miku/apexQQbot/apexapi"
+	"github.com/newton-miku/apexQQbot/tools"
 	"github.com/tencent-connect/botgo"
 	"github.com/tencent-connect/botgo/dto"
 	"github.com/tencent-connect/botgo/dto/message"
@@ -26,10 +28,15 @@ const (
 	path_ = "/qqbot"
 )
 
-var DebugFlag = false
+var (
+	DebugFlag   = false
+	VersionFlag = false
+)
 
 func init() {
-	flag.Bool("debug", false, "debug mode")
+	flag.BoolVar(&DebugFlag, "debug", false, "enable debug mode")
+	flag.BoolVar(&VersionFlag, "v", false, "output version information and exit")
+	flag.Parse()
 }
 
 // 消息处理器，持有 openapi 对象
@@ -38,6 +45,9 @@ var processor Processor
 const configFile = "conf/config.yaml"
 
 func main() {
+	if VersionFlag {
+		tools.PrintVersion()
+	}
 	basePath, _ := os.Getwd()
 	logger, err := New("./", DebugLevel)
 	// 把新的 logger 设置到 sdk 上，替换掉老的控制台 logger
@@ -49,6 +59,8 @@ func main() {
 
 	confPath := filepath.Join(basePath, configFile)
 	log.Printf("Loading config from: %s", confPath)
+	//  初始化 apexapi
+	apexapi.Init()
 
 	// 加载 appid 和 token
 	content, err := os.ReadFile(confPath)
@@ -121,7 +133,8 @@ func GroupATMessageEventHandler() event.GroupATMessageEventHandler {
 // C2CMessageEventHandler 实现处理 at 消息的回调
 func C2CMessageEventHandler() event.C2CMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSC2CMessageData) error {
-		return processor.ProcessC2CMessage(string(event.RawMessage), data)
+		input := data.Content
+		return processor.ProcessC2CMessage(input, data)
 	}
 }
 

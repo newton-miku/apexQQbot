@@ -80,11 +80,6 @@ var (
 	cacheExpiresAt  time.Time
 )
 
-func init() {
-	LoadModeDict(modeDictPath)
-	StartMapDictReloader(10*time.Second, mapDictPath)
-}
-
 // 获取所有 Current Map 中最早的 EndTime
 func getEarliestEndTime(mr MapRotate) time.Time {
 	times := []time.Time{

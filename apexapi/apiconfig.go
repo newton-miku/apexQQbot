@@ -14,7 +14,7 @@ type API struct {
 
 var ApiConf = API{}
 
-func init() {
+func LoadApexConfig() {
 	if ApiConf.ApiToken != "" {
 		log.Infof("API Token: %s", ApiConf.ApiToken)
 		return
@@ -26,12 +26,12 @@ func init() {
 	}
 
 	confPath := filepath.Join(basePath, "conf", "config.yaml")
-	log.Infof("Loading config from: %s", confPath)
+	log.Infof("Loading apexapi config from: %s", confPath)
 
-	LoadConfig(confPath)
+	StartLoadConfig(confPath)
 }
 
-func LoadConfig(confPath string) {
+func StartLoadConfig(confPath string) {
 	conf, err := os.ReadFile(confPath)
 	if err != nil {
 		log.Warnf("load config file failed, err:%v\n", err)
