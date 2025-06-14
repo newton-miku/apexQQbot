@@ -11,7 +11,7 @@ CONF_DIR = conf
 ASSET_DIR = asset
 
 # 日期命令
-BUILD_TIME ?= $(shell date +%Y-%m-%d\ %H:%M:%S)
+BUILD_TIME ?= $(shell TZ='Asia/Shanghai' date +%Y-%m-%d\ %H:%M:%S)
 DATE_CMD = date +%Y%m%d
 
 # 版本号生成（使用跨平台日期命令）
