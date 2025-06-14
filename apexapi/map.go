@@ -435,18 +435,23 @@ func GenerateMapImage() (string, error) {
 }
 
 // resizeImage 调整图片大小
-func resizeImage(img image.Image, width, height int) image.Image {
-	bounds := img.Bounds()
-	ratio := float64(bounds.Dx()) / float64(bounds.Dy())
-	newWidth := int(float64(height) * ratio)
-	if newWidth > width {
-		newWidth = width
-		height = int(float64(newWidth) / ratio)
+func resizeImage(img image.Image, width, height int, options ...bool) image.Image {
+	keepRatio := false
+	if len(options) > 0 {
+		keepRatio = options[0]
 	}
-
-	resizedImg := image.NewRGBA(image.Rect(0, 0, newWidth, height))
-	// 使用 golang.org/x/image/draw 的 NearestNeighbor
-	draw.NearestNeighbor.Scale(resizedImg, resizedImg.Bounds(), img, img.Bounds(), draw.Over, nil)
+	if keepRatio {
+		bounds := img.Bounds()
+		ratio := float64(bounds.Dx()) / float64(bounds.Dy())
+		newWidth := int(float64(height) * ratio)
+		if newWidth > width {
+			newWidth = width
+			height = int(float64(newWidth) / ratio)
+		}
+		width = newWidth
+	}
+	resizedImg := image.NewRGBA(image.Rect(0, 0, width, height))
+	draw.CatmullRom.Scale(resizedImg, resizedImg.Bounds(), img, img.Bounds(), draw.Over, nil)
 	return resizedImg
 }
 func CacheAllImage(mapRotate MapRotate) {
