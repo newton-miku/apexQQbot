@@ -1,4 +1,4 @@
-package apexQQbot
+package main
 
 import (
 	"context"
