@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-const (
+var (
 	Version   = "undefined"
 	BuildTime = "undefined"
 )

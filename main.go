@@ -48,6 +48,7 @@ func main() {
 	if VersionFlag {
 		tools.PrintVersion()
 	}
+	log.Printf("apexQQbot Version: %s", tools.Version)
 	basePath, _ := os.Getwd()
 	logger, err := New("./", DebugLevel)
 	// 把新的 logger 设置到 sdk 上，替换掉老的控制台 logger
