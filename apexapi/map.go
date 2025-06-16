@@ -128,10 +128,12 @@ func GetMapRotate() (MapRotate, error) {
 	}
 	slog.Debug("获取地图轮换", "statusCode", resp.StatusCode)
 	if resp.StatusCode == http.StatusOK {
+
 		var mapRotate MapRotate
 		var mapRaw struct {
 			MapRotate MapRotate `json:"rotation"`
 		}
+
 		err := json.Unmarshal(body, &mapRaw)
 		if err != nil {
 			botlog.Debugf("JSON解析错误: %v", err)

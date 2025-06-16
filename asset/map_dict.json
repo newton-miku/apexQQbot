@@ -27,6 +27,8 @@
     "freedm_swat_phase_runner": "相位穿梭器(死亡之眼-无护盾)",
     "freedm_tdm_thunderdome": "雷霆堡(团队死斗)",
     "control_thunderdome":  "雷霆堡(控制)",
+    "freedm_gungame_thunderdome": "雷霆堡(子弹时间)",
     "freedm_gungame_monument": "纪念碑(子弹时间)",
-    "control_divided_moon": "残月(控制)"
+    "control_divided_moon": "残月(控制)",
+    "control_olympus_labs": "哈蒙德实验室(控制)"
 }

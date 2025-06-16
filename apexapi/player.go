@@ -15,9 +15,14 @@ import (
 // GetData 发起API请求并处理响应
 func GetPlayerData(EAID string) (string, error) {
 	params := url.Values{}
-	params.Add("player", EAID)
-	params.Add("platform", "PC")
-	urlStr := "https://api.mozambiquehe.re/bridge?" + params.Encode()
+	// params.Add("player", EAID)
+	// params.Add("platform", "PC")
+
+	params.Add("userName", EAID)
+	params.Add("userPlatform", "PC")
+	params.Add("qt", "stats-single-legend")
+	urlStr := "https://lil2-gateway.apexlegendsstatus.com/gateway.php?" + params.Encode()
+	// urlStr := "https://api.mozambiquehe.re/bridge?" + params.Encode()
 
 	if urlStr == "" {
 		return "", ErrEmptyURL
@@ -35,7 +40,7 @@ func GetPlayerData(EAID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrRequestCreateFailed, err)
 	}
-	req.Header.Set("Authorization", ApiConf.ApiToken)
+	// req.Header.Set("Authorization", ApiConf.ApiToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -43,7 +48,7 @@ func GetPlayerData(EAID string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	limitReader := io.LimitReader(resp.Body, 10<<20) // 最大 10MB
+	limitReader := io.LimitReader(resp.Body, 64<<10) // 最大 64K
 	body, err := io.ReadAll(limitReader)
 	if err != nil {
 		return "", ErrReadResponseFailed
@@ -53,10 +58,15 @@ func GetPlayerData(EAID string) (string, error) {
 
 	if resp.StatusCode == http.StatusOK {
 		var tempJson map[string]interface{}
-		err := json.Unmarshal(body, &tempJson)
+		var statRes struct {
+			StatsAPI map[string]interface{} `json:"statsAPI"`
+		}
+		err := json.Unmarshal(body, &statRes)
 		if err != nil {
 			return "", fmt.Errorf("%w: %v", ErrInvalidJSON, err)
 		}
+
+		tempJson = statRes.StatsAPI
 
 		if errMsg, ok := tempJson["Error"]; ok {
 			if errorMsgStr, ok := errMsg.(string); ok {
@@ -70,6 +80,7 @@ func GetPlayerData(EAID string) (string, error) {
 				return "", fmt.Errorf("错误字段 'Error' 不是字符串类型：%T", errMsg)
 			}
 		}
+		body, _ = json.Marshal(tempJson)
 		return string(body), nil
 	}
 
