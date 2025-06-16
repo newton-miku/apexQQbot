@@ -239,7 +239,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		imgRichMsg := createRichMessage(msgBase, "")
 		err = p.sendGroupImgDataReply(context.Background(), data.GroupID, qrContent, imgRichMsg)
 		if err != nil {
-			botlog.Errorf("自建func发送地图图片失败: %v", err)
+			botlog.Errorf("发送地图图片失败: %v", err)
 			return nil
 		}
 

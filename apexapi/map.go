@@ -109,11 +109,12 @@ func GetMapRotate() (MapRotate, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", "https://api.mozambiquehe.re/maprotation?version=2", nil)
+	req, err := http.NewRequest("GET", "https://lil2-gateway.apexlegendsstatus.com/gateway.php?qt=map", nil)
+	// req, err := http.NewRequest("GET", "https://api.mozambiquehe.re/maprotation?version=2", nil)
 	if err != nil {
 		return MapRotate{}, fmt.Errorf("%w: %v", ErrRequestCreateFailed, err)
 	}
-	req.Header.Set("Authorization", ApiConf.ApiToken)
+	// req.Header.Set("Authorization", ApiConf.ApiToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -128,11 +129,15 @@ func GetMapRotate() (MapRotate, error) {
 	slog.Debug("获取地图轮换", "statusCode", resp.StatusCode)
 	if resp.StatusCode == http.StatusOK {
 		var mapRotate MapRotate
-		err := json.Unmarshal(body, &mapRotate)
+		var mapRaw struct {
+			MapRotate MapRotate `json:"rotation"`
+		}
+		err := json.Unmarshal(body, &mapRaw)
 		if err != nil {
 			botlog.Debugf("JSON解析错误: %v", err)
 			return MapRotate{}, ErrInvalidJSON
 		}
+		mapRotate = mapRaw.MapRotate
 
 		// 更新缓存和过期时间
 		cachedMapRotate = mapRotate
