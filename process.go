@@ -197,6 +197,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		bindingData := apexapi.PlayerBindingData{
 			QQ:             qqUser.ID,
 			EAID:           EAID,
+			EAUID:          playerData["uid"].(string),
 			LastUpdateTime: time.Now(),
 			LastRankScore:  rankScore,
 		}
@@ -250,13 +251,16 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 	// 玩家查询命令
 	if isCommandMatch(input, playerCmds) {
 		EAID := ""
+		var (
+			lastScore      int
+			lastUpdateTime time.Time
+		)
 		bind := false
 		// 检查是否有空格分隔符
 		parts := strings.SplitN(input, " ", 2)
 		if len(parts) > 1 {
 			EAID = strings.TrimSpace(parts[1])
 		}
-		log.Println("处理玩家查询命令,EAID=", EAID)
 		// 如果没有输入 EAID，尝试从绑定中获取
 		if EAID == "" {
 			bindingData, exists := apexapi.Players.Get(qqUser.ID)
@@ -270,6 +274,11 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 			}
 			EAID = bindingData.EAID
 			bind = true
+			lastScore = bindingData.LastRankScore
+			lastUpdateTime = bindingData.LastUpdateTime
+			log.Println("处理玩家查询命令,绑定EAID=", EAID)
+		} else {
+			log.Println("处理玩家查询命令,EAID=", EAID)
 		}
 
 		dataStr, err := apexapi.GetPlayerData(EAID)
@@ -283,8 +292,15 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 			_ = p.sendGroupReply(context.Background(), data.GroupID, genErrMessage(msgBase, fmt.Errorf("获取到空的玩家数据")))
 			return nil
 		}
-
-		msg := apexapi.DisplayPlayerData(dataStr)
+		var msg string
+		if bind {
+			msg = apexapi.DisplayPlayerData(dataStr, apexapi.DisplayChangedOption{
+				LastScore: lastScore,
+				LastTime:  lastUpdateTime,
+			})
+		} else {
+			msg = apexapi.DisplayPlayerData(dataStr)
+		}
 		if bind {
 			rank, _ := apexapi.GetPlayerRank(dataStr)
 			bindingData, _ := apexapi.Players.Get(qqUser.ID)

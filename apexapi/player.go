@@ -79,8 +79,13 @@ func GetPlayerData(EAID string) (string, error) {
 	return "", ErrStatusCode(resp.StatusCode)
 }
 
+type DisplayChangedOption struct {
+	LastScore int
+	LastTime  time.Time
+}
+
 // DisplayPlayerData 美观地显示玩家数据
-func DisplayPlayerData(data string) string {
+func DisplayPlayerData(data string, change ...DisplayChangedOption) string {
 	var playerData map[string]interface{}
 	err := json.Unmarshal([]byte(data), &playerData)
 	if err != nil {
@@ -121,6 +126,13 @@ func DisplayPlayerData(data string) string {
 	if ok {
 		output.WriteString(fmt.Sprintf("段位: %s %v\n", rankData["rankName"], int(rankData["rankDiv"].(float64))))
 		output.WriteString(fmt.Sprintf("段位分数: %.0f\n", rankData["rankScore"].(float64)))
+		if len(change) > 0 {
+			deltaScore := int(rankData["rankScore"].(float64)) - change[0].LastScore
+			if deltaScore != 0 {
+				output.WriteString(fmt.Sprintf("段位分数变化: %+d\n", deltaScore))
+				output.WriteString(fmt.Sprintf("当前用户上次查询时间: %s\n", change[0].LastTime.Format("2006-01-02 15:04:05")))
+			}
+		}
 	}
 
 	output.WriteString(fmt.Sprintf("\n当前选择的传奇: %s\n", selectedLegend["LegendName"]))
@@ -143,7 +155,7 @@ func GetPlayerRank(data string) (int, error) {
 	var playerData map[string]interface{}
 	err := json.Unmarshal([]byte(data), &playerData)
 	if err != nil {
-		return 0, fmt.Errorf("解析玩家数据出错: %v\n", err)
+		return 0, fmt.Errorf("解析玩家数据出错: %v", err)
 	}
 
 	// 提取基本信息

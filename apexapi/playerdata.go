@@ -11,6 +11,7 @@ import (
 type PlayerBindingData struct {
 	QQ             string
 	EAID           string
+	EAUID          string
 	LastUpdateTime time.Time
 	LastRankScore  int
 }
@@ -37,6 +38,27 @@ func (p *PlayerData) Get(qqID string) (PlayerBindingData, bool) {
 	defer p.Lock.RUnlock()
 	binding, ok := p.data[qqID]
 	return binding, ok
+}
+func (p *PlayerData) GetUIDbyQQ(qqID string) (string, bool) {
+	p.Lock.RLock()
+	defer p.Lock.RUnlock()
+	binding, ok := p.data[qqID]
+	return binding.EAUID, ok
+}
+func (p *PlayerData) GetRankscoreByQQ(qqID string) int {
+	p.Lock.RLock()
+	defer p.Lock.RUnlock()
+	binding, ok := p.data[qqID]
+	if ok {
+		return binding.LastRankScore
+	}
+	return 0
+}
+func (p *PlayerData) GetEAIDbyQQ(qqID string) (string, bool) {
+	p.Lock.RLock()
+	defer p.Lock.RUnlock()
+	binding, ok := p.data[qqID]
+	return binding.EAID, ok
 }
 
 // 导出 Set 方法用于设置绑定数据
