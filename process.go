@@ -160,7 +160,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 	// 统一处理绑定命令
 	if isCommandMatch(input, bindCmds) {
 		// 提取 EAID 并进行绑定操作
-		EAID := ""
+		EAID, UID := "", ""
 		// 检查是否有空格分隔符
 		parts := strings.SplitN(input, " ", 2)
 		if len(parts) > 1 {
@@ -186,18 +186,29 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 			_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
 			return nil
 		}
-
-		rankData, ok := playerData["rank"].(map[string]interface{})
+		global, ok := playerData["global"].(map[string]interface{})
+		if !ok {
+			log.Println("playerData[\"global\"] 类型断言失败")
+			return nil
+		}
+		rankData, ok := global["rank"].(map[string]interface{})
 		rankScore := 0
 		if ok {
 			rankScore = int(rankData["rankScore"].(float64))
+		}
+		// log.Printf("玩家数据: %v", playerData)
+
+		UID, ok = global["uid"].(string)
+		if !ok {
+			log.Println("global[\"uid\"] 类型断言失败 或 不存在")
+			return nil
 		}
 
 		// 更新绑定数据
 		bindingData := apexapi.PlayerBindingData{
 			QQ:             qqUser.ID,
 			EAID:           EAID,
-			EAUID:          playerData["uid"].(string),
+			EAUID:          UID,
 			LastUpdateTime: time.Now(),
 			LastRankScore:  rankScore,
 		}
