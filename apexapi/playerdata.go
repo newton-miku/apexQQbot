@@ -2,6 +2,7 @@ package apexapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -80,9 +81,14 @@ func (p *PlayerData) SaveBindingRecords() error {
 		return err
 	}
 	defer func() {
-		tempFile.Close()
-		os.Remove(tempFile.Name()) // 删除临时文件（仅在出错时）
+		// tempFile.Close()
+		os.Remove(tempFile.Name()) // 删除临时文件
 	}()
+
+	// 设置文件权限为 0644
+	if err := tempFile.Chmod(0644); err != nil {
+		return fmt.Errorf("failed to set file permissions: %w", err)
+	}
 
 	Players.Lock.RLock()
 	defer Players.Lock.RUnlock()
