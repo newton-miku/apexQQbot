@@ -131,6 +131,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		mapCmds    = []string{"地图", "map"}
 		playerCmds = []string{"查询", "player"}
 		bindCmds   = []string{"绑定", "bind"}
+		serverCmds = []string{"区服", "server"}
 		// helpCmds   = []string{"帮助", "help"}
 	)
 
@@ -168,7 +169,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		}
 
 		if EAID == "" {
-			replyMsg := createMessage(msgBase, "请提供有效的 EAID，格式为 /a绑定 <EAID>")
+			replyMsg := createMessage(msgBase, "请提供有效的 EAID（必须为EA平台中的用户名，不可使用Steam名称）\n格式为 /a绑定 <EAID>\n例如如：/a绑定 MDY_KaLe")
 			_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
 			return nil
 		}
@@ -182,7 +183,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		err = json.Unmarshal([]byte(playerJson), &playerData)
 		if err != nil {
 			str := fmt.Sprintf("解析玩家数据出错: %v\n", err)
-			replyMsg := createMessage(msgBase, fmt.Sprint("绑定失败，查询信息时发送错误\n", str))
+			replyMsg := createMessage(msgBase, fmt.Sprint("绑定失败，查询信息时发送错误，请稍后再试\n", str))
 			_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
 			return nil
 		}
@@ -256,6 +257,31 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		}
 
 		log.Printf("发送地图图片成功")
+		return nil
+	}
+	// 区服查询命令统一处理
+	if isCommandMatch(input, serverCmds) {
+		log.Println("处理区服查询命令")
+
+		// 读取图片字节数据
+		qrContent, err := os.ReadFile("assets/Static/server.png")
+		if err != nil {
+			botlog.Warnf("读取服务器图片失败: %v", err)
+			replyMsg := createMessage(msgBase, fmt.Sprintf("读取服务器图片失败：%v", err))
+			if sendErr := p.sendGroupReply(context.Background(), data.GroupID, replyMsg); sendErr != nil {
+				log.Printf("发送错误消息失败: %v", sendErr)
+			}
+			return nil
+		}
+
+		imgRichMsg := createRichMessage(msgBase, "")
+		err = p.sendGroupImgDataReply(context.Background(), data.GroupID, qrContent, imgRichMsg)
+		if err != nil {
+			botlog.Errorf("发送服务器图片失败: %v", err)
+			return nil
+		}
+
+		log.Printf("发送服务器图片成功")
 		return nil
 	}
 

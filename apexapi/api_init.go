@@ -19,4 +19,5 @@ func Init() {
 
 	// 加载API配置
 	LoadApexConfig()
+	log.Debug("api config loaded\n")
 }

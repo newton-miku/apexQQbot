@@ -81,6 +81,7 @@ func main() {
 	if err = token.StartRefreshAccessToken(ctx, tokenSource); err != nil {
 		log.Fatalln(err)
 	}
+	log.Println("准备初始化 openapi")
 	// 初始化 openapi，正式环境
 	api := botgo.NewOpenAPI(credentials.AppID, tokenSource).WithTimeout(5 * time.Second).SetDebug(DebugFlag)
 	processor = Processor{
@@ -102,6 +103,7 @@ func main() {
 	http.HandleFunc(path_, func(writer http.ResponseWriter, request *http.Request) {
 		webhook.HTTPHandler(writer, request, credentials)
 	})
+	log.Println("准备启动 http server")
 	if err = http.ListenAndServe(fmt.Sprintf("%s:%d", host_, port_), nil); err != nil {
 		log.Fatal("setup server fatal:", err)
 	}
