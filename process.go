@@ -264,7 +264,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		log.Println("处理区服查询命令")
 
 		// 读取图片字节数据
-		qrContent, err := os.ReadFile("assets/Static/server.png")
+		qrContent, err := os.ReadFile("asset/Static/server.png")
 		if err != nil {
 			botlog.Warnf("读取服务器图片失败: %v", err)
 			replyMsg := createMessage(msgBase, fmt.Sprintf("读取服务器图片失败：%v", err))
