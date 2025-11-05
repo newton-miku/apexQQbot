@@ -119,37 +119,40 @@ func createImgMessage(data dto.Message, picContent []byte) *dto.RichMediaMessage
 	}
 }
 
+// 定义命令关键词
+const (
+	cmdPrefix = "/a"
+)
+
+// 工具函数：检查输入是否匹配任意命令
+func isCommandMatch(input string, cmdLists ...[]string) bool {
+	input = strings.TrimSpace(strings.ToLower(input))
+	if strings.HasPrefix(input, strings.ToLower(cmdPrefix)) {
+		input = input[len(cmdPrefix):]
+		// 修复：去除前缀后的空格，确保命令能正确匹配
+		input = strings.TrimSpace(input)
+	}
+	for _, list := range cmdLists {
+		for _, cmd := range list {
+			if strings.HasPrefix(input, strings.ToLower(cmd)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ProcessGroupMessage 回复群消息
 func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageData) error {
 	// 提前 trim 输入
 	input = strings.TrimSpace(input)
-	// 定义命令关键词
-	const (
-		cmdPrefix = "/a"
-	)
 	var (
 		mapCmds    = []string{"地图", "map"}
 		playerCmds = []string{"查询", "player"}
 		bindCmds   = []string{"绑定", "bind"}
 		serverCmds = []string{"区服", "server"}
-		// helpCmds   = []string{"帮助", "help"}
+		helpCmds   = []string{"帮助", "help"}
 	)
-
-	// 工具函数：检查输入是否匹配任意命令
-	isCommandMatch := func(input string, cmdLists ...[]string) bool {
-		input = strings.TrimSpace(strings.ToLower(input))
-		if strings.HasPrefix(input, strings.ToLower(cmdPrefix)) {
-			input = input[len(cmdPrefix):]
-		}
-		for _, list := range cmdLists {
-			for _, cmd := range list {
-				if strings.HasPrefix(input, strings.ToLower(cmd)) {
-					return true
-				}
-			}
-		}
-		return false
-	}
 	// 获取当前用户信息
 	var qqUser *dto.User
 	if data.Author != nil && data.Author.ID != "" {
@@ -239,21 +242,9 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		}
 
 		// 读取图片字节数据
-		qrContent, err := os.ReadFile(mapResultPath)
-		if err != nil {
-			botlog.Warnf("读取地图图片失败: %v", err)
-			replyMsg := createMessage(msgBase, fmt.Sprintf("读取地图图片失败：%v", err))
-			if sendErr := p.sendGroupReply(context.Background(), data.GroupID, replyMsg); sendErr != nil {
-				log.Printf("发送错误消息失败: %v", sendErr)
-			}
-			return nil
-		}
-
-		imgRichMsg := createRichMessage(msgBase, "")
-		err = p.sendGroupImgDataReply(context.Background(), data.GroupID, qrContent, imgRichMsg)
-		if err != nil {
-			botlog.Errorf("发送地图图片失败: %v", err)
-			return nil
+		err, shouldReturn := p.GetImgAndSendToGroup(mapResultPath, msgBase, data)
+		if shouldReturn {
+			return err
 		}
 
 		log.Printf("发送地图图片成功")
@@ -264,21 +255,9 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		log.Println("处理区服查询命令")
 
 		// 读取图片字节数据
-		qrContent, err := os.ReadFile("asset/Static/Server.png")
-		if err != nil {
-			botlog.Warnf("读取服务器图片失败: %v", err)
-			replyMsg := createMessage(msgBase, fmt.Sprintf("读取服务器图片失败：%v", err))
-			if sendErr := p.sendGroupReply(context.Background(), data.GroupID, replyMsg); sendErr != nil {
-				log.Printf("发送错误消息失败: %v", sendErr)
-			}
-			return nil
-		}
-
-		imgRichMsg := createRichMessage(msgBase, "")
-		err = p.sendGroupImgDataReply(context.Background(), data.GroupID, qrContent, imgRichMsg)
-		if err != nil {
-			botlog.Errorf("发送服务器图片失败: %v", err)
-			return nil
+		err, shouldReturn := p.GetImgAndSendToGroup("asset/Static/Server.png", msgBase, data)
+		if shouldReturn {
+			return err
 		}
 
 		log.Printf("发送服务器图片成功")
@@ -353,6 +332,15 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		}
 		return nil
 	}
+	if isCommandMatch(input, helpCmds) {
+		helpInfo := "以下为指令示例（其中[]中的表示可选项）：\n"
+		helpInfo += "获取当前轮换地图：@机器人 [/a]地图\n"
+		helpInfo += "绑定/换绑EA账号：@机器人 [/a]绑定 EAID,如@机器人 绑定 kasaa"
+		helpInfo += "查询绑定的EA账号数据：@机器人 [/a]查询\n"
+		helpInfo += "获取区服对应中英文对照：@机器人 [/a]区服\n"
+		replyMsg := createMessage(msgBase, helpInfo)
+		_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
+	}
 
 	// 其他指令或默认行为
 	msg := generateDemoMessage(input, msgBase)
@@ -362,6 +350,26 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 	}
 
 	return nil
+}
+
+func (p Processor) GetImgAndSendToGroup(mapResultPath string, msgBase dto.Message, data *dto.WSGroupATMessageData) (error, bool) {
+	qrContent, err := os.ReadFile(mapResultPath)
+	if err != nil {
+		botlog.Warnf("读取地图图片失败: %v", err)
+		replyMsg := createMessage(msgBase, "读取地图图片失败，请反馈至开发人员")
+		if sendErr := p.sendGroupReply(context.Background(), data.GroupID, replyMsg); sendErr != nil {
+			log.Printf("发送错误消息失败: %v", sendErr)
+		}
+		return nil, true
+	}
+
+	imgRichMsg := createRichMessage(msgBase, "")
+	err = p.sendGroupImgDataReply(context.Background(), data.GroupID, qrContent, imgRichMsg)
+	if err != nil {
+		botlog.Errorf("发送地图图片失败: %v", err)
+		return nil, true
+	}
+	return nil, false
 }
 
 // ProcessC2CMessage 回复C2C消息
@@ -375,32 +383,12 @@ func (p Processor) ProcessC2CMessage(input string, data *dto.WSC2CMessageData) e
 	}
 	// 提前 trim 输入
 	input = strings.TrimSpace(input)
-	// 定义命令关键词
-	const (
-		cmdPrefix = "/a"
-	)
 	var (
 		// mapCmds    = []string{"地图", "map"}
 		playerCmds = []string{"查询", "player"}
 		bindCmds   = []string{"绑定", "bind"}
 		// helpCmds   = []string{"帮助", "help"}
 	)
-
-	// 工具函数：检查输入是否匹配任意命令
-	isCommandMatch := func(input string, cmdLists ...[]string) bool {
-		input = strings.ToLower(strings.TrimSpace(input))
-		if strings.HasPrefix(input, strings.ToLower(cmdPrefix)) {
-			input = input[len(cmdPrefix):]
-		}
-		for _, list := range cmdLists {
-			for _, cmd := range list {
-				if strings.HasPrefix(input, strings.ToLower(cmd)) {
-					return true
-				}
-			}
-		}
-		return false
-	}
 
 	// 提前构造 message 对象
 	msgBase := dto.Message(*data)
@@ -559,7 +547,7 @@ func generateDemoMessage(input string, data dto.Message) *dto.MessageToCreate {
 	log.Printf("收到指令: %+v", input)
 	msg := ""
 	if len(input) > 0 {
-		msg += "收到:" + input
+		msg += "您输入的指令指令\"" + input + "\"似乎有误，请使用帮助获取指令手册"
 	}
 	for _, _v := range data.Attachments {
 		msg += ",收到文件类型:" + _v.ContentType
