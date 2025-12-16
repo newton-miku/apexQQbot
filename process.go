@@ -335,7 +335,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 	if isCommandMatch(input, helpCmds) {
 		helpInfo := "以下为指令示例（其中[]中的表示可选项）：\n"
 		helpInfo += "获取当前轮换地图：@机器人 [/a]地图\n"
-		helpInfo += "绑定/换绑EA账号：@机器人 [/a]绑定 EAID,如@机器人 绑定 kasaa"
+		helpInfo += "绑定/换绑EA账号：@机器人 [/a]绑定 EAID,如@机器人 绑定 kasaa\n"
 		helpInfo += "查询绑定的EA账号数据：@机器人 [/a]查询\n"
 		helpInfo += "获取区服对应中英文对照：@机器人 [/a]区服\n"
 		replyMsg := createMessage(msgBase, helpInfo)

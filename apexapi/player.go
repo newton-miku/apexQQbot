@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/newton-miku/apexQQbot/tools"
 )
 
 // GetData 发起API请求并处理响应
@@ -145,8 +147,15 @@ func DisplayPlayerData(data string, change ...DisplayChangedOption) string {
 			}
 		}
 	}
-
-	output.WriteString(fmt.Sprintf("\n当前选择的传奇: %s\n", selectedLegend["LegendName"]))
+	legendsNamePath := "asset/legends.json"
+	// 创建翻译器
+	legendTrans, err := tools.NewTranslator(legendsNamePath)
+	if err != nil {
+		log.Printf("初始化翻译器失败：%v\n", err)
+	}
+	defer legendTrans.Close()
+	legendName := legendTrans.Translate(selectedLegend["LegendName"].(string))
+	output.WriteString(fmt.Sprintf("\n当前选择的传奇: %s\n", legendName))
 
 	output.WriteString("传奇数据:\n")
 	for i, stat := range legendData {
