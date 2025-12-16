@@ -94,7 +94,7 @@ func (t *Translator) watchConfig() {
 				return
 			}
 			// 只处理文件修改或写入完成的事件（避免重复触发）
-			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Close == fsnotify.Close {
+			if event.Op&fsnotify.Write == fsnotify.Write {
 				fmt.Println("\n翻译器 检测到配置文件变化，正在重载...")
 				// 延迟加载（避免文件还没写完就触发重载，导致解析失败）
 				time.Sleep(100 * time.Millisecond)

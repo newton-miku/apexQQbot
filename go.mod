@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.24.3
 
 require (
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/tencent-connect/botgo v0.2.1
 	golang.org/x/image v0.28.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -12,6 +13,7 @@ require (
 
 require (
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 )
 
