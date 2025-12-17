@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/newton-miku/apexQQbot/apexapi"
-	"github.com/tencent-connect/botgo/log"
 	"image"
 	_ "image/jpeg"
+
+	"github.com/newton-miku/apexQQbot/apexapi"
+	"github.com/tencent-connect/botgo/log"
 )
 
 func TestGetMapRotate(t *testing.T) {
@@ -97,11 +98,6 @@ func TestGetMapResult(t *testing.T) {
 	}
 	confPath := filepath.Join(basePath, "conf", "config.yaml")
 	apexapi.StartLoadConfig(confPath)
-
-	// 预检查：地图接口可达性
-	if _, err := apexapi.GetMapRotate(); err != nil {
-		t.Skipf("跳过：地图接口不可达或超时：%v", err)
-	}
 
 	// 调用集成结果函数
 	path, err := apexapi.GetMapResult()
