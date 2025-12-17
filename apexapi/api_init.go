@@ -1,15 +1,22 @@
 package apexapi
 
 import (
-	"time"
-
+	"github.com/newton-miku/apexQQbot/tools"
 	"github.com/tencent-connect/botgo/log"
 )
 
 func Init() {
-	//  加载地图配置
-	LoadModeDict(modeDictPath)
-	StartMapDictReloader(10*time.Second, mapDictPath)
+	// 加载地图与模式翻译器（热更新）
+	if t, err := tools.NewTranslator(modeDictPath); err == nil {
+		modeTranslator = t
+	}
+	if t, err := tools.NewTranslator(mapDictPath); err == nil {
+		mapTranslator = t
+	}
+	// 加载传奇翻译器
+	if t, err := tools.NewTranslator(legendsDictPath); err == nil {
+		legendsTranslator = t
+	}
 
 	// 加载玩家绑定数据
 	err := Players.loadPlayerData()

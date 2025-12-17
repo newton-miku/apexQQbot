@@ -6,14 +6,12 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/newton-miku/apexQQbot/tools"
@@ -106,7 +104,8 @@ func GetMapRotate() (MapRotate, error) {
 	}
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		// 因api网关位于海外，请求时间可能较长
+		Timeout: 15 * time.Second,
 	}
 
 	req, err := http.NewRequest("GET", "https://lil2-gateway.apexlegendsstatus.com/gateway.php?qt=map", nil)
@@ -151,112 +150,44 @@ func GetMapRotate() (MapRotate, error) {
 }
 
 var (
-	MapDict       map[string]string
-	mapDictMutex  sync.RWMutex
-	ModeDict      map[string]string
-	modeDictMutex sync.RWMutex
-	mapDictPath   = "./asset/map_dict.json"
-	modeDictPath  = "./asset/mode_dict.json"
-	assetDir      = "./asset/"
-	assetFontDir  = "./asset/Font"
-	assetCacheDir = "./asset/Map"
-	lastModTime   time.Time
+	// 使用通用翻译器
+	mapTranslator  *tools.Translator
+	modeTranslator *tools.Translator
+	mapDictPath    = "./asset/map_dict.json"
+	modeDictPath   = "./asset/mode_dict.json"
+	assetDir       = "./asset/"
+	assetFontDir   = "./asset/Font"
+	assetCacheDir  = "./asset/Map"
 )
-
-// LoadMapDict 只在文件修改后重新加载
-func LoadMapDict(path string) (int, error) {
-	fileInfo, err := os.Stat(path)
-	if err != nil {
-		return 2, err
-	}
-
-	// 如果文件未修改，则跳过加载
-	if !fileInfo.ModTime().After(lastModTime) {
-		// log.Debug("地图字典文件未变化，跳过重载")
-		return 1, nil
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 2, err
-	}
-
-	var dict map[string]string
-	if err := json.Unmarshal(data, &dict); err != nil {
-		return 2, err
-	}
-
-	mapDictMutex.Lock()
-	defer mapDictMutex.Unlock()
-	MapDict = dict
-	lastModTime = fileInfo.ModTime() // 更新最后修改时间
-	botlog.Debug("地图字典已重载", MapDict)
-	log.Print("地图字典已重载")
-
-	return 0, nil
-}
-
-// LoadModeDict
-func LoadModeDict(path string) (int, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 2, err
-	}
-
-	var dict map[string]string
-	if err := json.Unmarshal(data, &dict); err != nil {
-		return 2, err
-	}
-
-	modeDictMutex.Lock()
-	defer modeDictMutex.Unlock()
-	ModeDict = dict
-
-	return 0, nil
-}
 
 // 获取地图中文名（线程安全）
 func GetMapName(code string) string {
-	mapDictMutex.RLock()
-	defer mapDictMutex.RUnlock()
-
-	if name, ok := MapDict[code]; ok {
-		return name
+	// 如果翻译器不存在，创建一个
+	if mapTranslator == nil {
+		// 创建翻译器
+		mapTrans, err := tools.NewTranslator(mapDictPath)
+		if err != nil {
+			botlog.Debugf("初始化翻译器失败：%v\n", err)
+			return code // 缺失返回code
+		}
+		mapTranslator = mapTrans
 	}
-	return code // 缺失返回code
+	return mapTranslator.Translate(code)
 }
 
 // 获取模式中文名（线程安全）
 func GetModeName(code string) string {
-	modeDictMutex.RLock()
-	defer modeDictMutex.RUnlock()
-
-	if name, ok := ModeDict[code]; ok {
-		return name
-	}
-	return code // 缺失返回code
-}
-
-// 加载地图字典
-func StartMapDictReloader(interval time.Duration, path string) {
-	go func() {
-		for {
-			if code, err := LoadMapDict(path); err != nil {
-				botlog.Errorf("重新加载地图字典失败: %v", err)
-			} else {
-				switch code { // 0: 已重载字典, 1: 地图字典文件无变化, 2: 无效的JSON格式
-				case 0:
-					botlog.Info("地图字典已重载")
-				case 1:
-					// log.Debug("地图字典文件无变化")
-				case 2:
-					botlog.Error("地图字典重载错误", err)
-				default:
-				}
-			}
-			time.Sleep(interval)
+	// 如果翻译器不存在，创建一个
+	if modeTranslator == nil {
+		// 创建翻译器
+		modeTrans, err := tools.NewTranslator(modeDictPath)
+		if err != nil {
+			botlog.Debugf("初始化翻译器失败：%v\n", err)
+			return code // 缺失返回code
 		}
-	}()
+		modeTranslator = modeTrans
+	}
+	return modeTranslator.Translate(code)
 }
 
 // 下载并缓存图片
@@ -345,85 +276,83 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
 }
 
-// GenerateMapImage 生成地图轮换信息图片
+// GenerateMapImage 生成地图轮换信息图片（优化：纯内存管线，避免临时文件I/O）
 func GenerateMapImage() (string, error) {
 	mapRotate, err := GetMapRotate()
 	if err != nil {
 		return "", fmt.Errorf("获取地图轮换信息失败：%v", err)
 	}
 
+	// 确保翻译器已初始化
+	if mapTranslator == nil {
+		if t, err := tools.NewTranslator(mapDictPath); err == nil {
+			mapTranslator = t
+		}
+	}
+	if modeTranslator == nil {
+		if t, err := tools.NewTranslator(modeDictPath); err == nil {
+			modeTranslator = t
+		}
+	}
+
 	selMap := []string{"battle_royale", "ranked", "ltm"}
-	var images []image.Image
+	images := make([]image.Image, 0, 3)
 
 	for i, modeMap := range getMapRotate(mapRotate) {
 		current := modeMap.Current
 		next := modeMap.Next
 
+		// 缓存并读取当前地图图片
 		imgPath, err := CacheImage(current.Asset)
 		if err != nil {
 			return "", fmt.Errorf("缓存图片失败：%v", err)
 		}
-		// 调整图片大小
+
 		imgFile, err := os.Open(imgPath)
 		if err != nil {
 			return "", fmt.Errorf("打开图片失败：%v", err)
 		}
-		defer imgFile.Close()
-
-		originalImg, _, err := image.Decode(imgFile)
+		origImg, _, err := image.Decode(imgFile)
+		_ = imgFile.Close()
 		if err != nil {
 			return "", fmt.Errorf("解码图片失败：%v", err)
 		}
 
-		resizedImg := resizeImage(originalImg, 960, 300)
+		// 缩放到目标尺寸
+		resizedImg := resizeImage(origImg, 960, 300)
 
-		// 保存调整后的图片到临时路径
-		tmpResizedPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s_resized.jpg", selMap[i]))
-		tmpResizedFile, err := os.Create(tmpResizedPath)
-		if err != nil {
-			return "", fmt.Errorf("创建临时缩放图片文件失败：%v", err)
-		}
-		defer tmpResizedFile.Close()
+		// 创建可编辑副本（内存中）
+		dst := image.NewRGBA(resizedImg.Bounds())
+		// 直接拷贝缩放后的图像到目标
+		draw.Draw(dst, dst.Bounds(), resizedImg, image.Point{}, draw.Src)
 
-		err = jpeg.Encode(tmpResizedFile, resizedImg, nil)
-		if err != nil {
-			return "", fmt.Errorf("保存缩放图片失败：%v", err)
-		}
-
-		tmpImgPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s_%s.jpg", selMap[i], current.Code))
+		// 构造文本信息
 		endTimeStr := time.Time(current.EndTime).Format("2006-01-02 15:04:05")
 		remaining := time.Until(time.Time(current.EndTime))
+		if remaining < 0 {
+			remaining = 0
+		}
 		remainingStr := formatDuration(remaining)
 
 		textLines := []tools.TextLine{
 			{Text: GetModeName(selMap[i]), Size: 50, X: 20, Y: 60, FontPath: filepath.Join(assetFontDir, "海报粗圆体.ttf")},
-			{Text: GetMapName(current.Code), Size: 80, X: 20, Y: 170, FontPath: filepath.Join(assetFontDir, "海报粗圆体.ttf")},
-			{Text: fmt.Sprintf("结束时间：%s（%s）", endTimeStr, remainingStr), Size: 30, X: 20, Y: 220, FontPath: filepath.Join(assetFontDir, "海报粗圆体.ttf")},
-			{Text: fmt.Sprintf("下一轮换：%s", GetMapName(next.Code)), Size: 30, X: 20, Y: 260, FontPath: filepath.Join(assetFontDir, "海报粗圆体.ttf")},
+			{Text: GetMapName(current.Code), Size: 80, X: 20, Y: 150, FontPath: filepath.Join(assetFontDir, "海报粗圆体.ttf")},
+			{Text: fmt.Sprintf("结束时间：%s（%s）", endTimeStr, remainingStr), Size: 30, X: 20, Y: 210, FontPath: filepath.Join(assetFontDir, "海报粗圆体.ttf")},
+			{Text: fmt.Sprintf("下一轮换：%s", GetMapName(next.Code)), Size: 30, X: 20, Y: 250, FontPath: filepath.Join(assetFontDir, "海报粗圆体.ttf")},
 		}
 
-		err = tools.AddTextToImage(tmpResizedPath, tmpImgPath, textLines)
-		if err != nil {
-			return "", fmt.Errorf("添加文本到图片失败：%v", err)
-		}
+		// 直接在内存图片上绘制文本
+		tools.AddTextToImageInPlace(dst, textLines)
 
-		imgFile, err = os.Open(tmpImgPath)
-		if err != nil {
-			return "", fmt.Errorf("打开图片失败：%v", err)
-		}
-		defer imgFile.Close()
-
-		img, _, err := image.Decode(imgFile)
-		if err != nil {
-			return "", fmt.Errorf("解码图片失败：%v", err)
-		}
-
-		images = append(images, img)
+		images = append(images, dst)
 	}
 
+	// 竖向拼接三张模式图片
 	finalImg := image.NewRGBA(image.Rect(0, 0, 960, 900))
 	for i, img := range images {
-		draw.Draw(finalImg, image.Rect(0, i*300, 960, (i+1)*300), img, image.Point{}, draw.Src)
+		// 使用 CatmullRom.Scale 进行拷贝（无需额外导入标准库 image/draw）
+		dstRect := image.Rect(0, i*300, 960, (i+1)*300)
+		draw.CatmullRom.Scale(finalImg, dstRect, img, img.Bounds(), draw.Over, nil)
 	}
 
 	finalImgPath := filepath.Join(os.TempDir(), "map_ok.jpg")
@@ -433,7 +362,8 @@ func GenerateMapImage() (string, error) {
 	}
 	defer finalImgFile.Close()
 
-	err = jpeg.Encode(finalImgFile, finalImg, nil)
+	// 使用较高质量输出
+	err = jpeg.Encode(finalImgFile, finalImg, &jpeg.Options{Quality: 95})
 	if err != nil {
 		return "", fmt.Errorf("保存最终图片失败：%v", err)
 	}

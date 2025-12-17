@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	botlog "github.com/tencent-connect/botgo/log"
 	"golang.org/x/image/font"
@@ -27,6 +28,12 @@ type TextLine struct {
 	Alignment string // "left", "center", "right"
 	FontPath  string //  字体文件路径
 }
+
+// 字体缓存，减少重复解析成本
+var (
+	fontCacheMu sync.RWMutex
+	fontCache   = make(map[string]font.Face)
+)
 
 // 在图片上添加多行文本
 func AddTextToImage(inputPath, outputPath string, textLines []TextLine) error {
@@ -77,10 +84,19 @@ func AddTextToImage(inputPath, outputPath string, textLines []TextLine) error {
 
 	return nil
 }
+
 func loadFontFace(fontPath string, size float64) (font.Face, error) {
 	if fontPath == "" {
 		return basicfont.Face7x13, nil
 	}
+
+	key := fmt.Sprintf("%s|%.2f", fontPath, size)
+	fontCacheMu.RLock()
+	if face, ok := fontCache[key]; ok {
+		fontCacheMu.RUnlock()
+		return face, nil
+	}
+	fontCacheMu.RUnlock()
 
 	fontBytes, err := os.ReadFile(fontPath)
 	if err != nil {
@@ -104,6 +120,9 @@ func loadFontFace(fontPath string, size float64) (font.Face, error) {
 		return basicfont.Face7x13, nil
 	}
 
+	fontCacheMu.Lock()
+	fontCache[key] = face
+	fontCacheMu.Unlock()
 	return face, nil
 }
 
@@ -115,18 +134,19 @@ func addSingleLine(img draw.Image, line TextLine) {
 		fg = color.White // 默认白色
 	}
 
-	// 创建一个字体上下文
+	// 加载字体
+	face, _ := loadFontFace(line.FontPath, line.Size)
 	d := &font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(fg),
-		Face: basicfont.Face7x13,
-		Dot: fixed.Point26_6{
-			X: fixed.Int26_6(line.X * 64),
-			Y: fixed.Int26_6(line.Y*64 + basicfont.Face7x13.Metrics().Ascent.Ceil()),
-		},
+		Face: face,
 	}
-	// 如果指定了字体文件，则加载该字体
-	d.Face, _ = loadFontFace(line.FontPath, line.Size)
+	// 以传入的 Y 作为基线坐标，确保与调用方坐标语义一致（避免顶部/基线混淆导致的位置偏差）
+	d.Dot = fixed.Point26_6{
+		X: fixed.I(line.X),
+		Y: fixed.I(line.Y),
+	}
+
 	// 计算文本宽度以进行对齐
 	width := 0
 	for _, r := range line.Text {
@@ -137,21 +157,23 @@ func addSingleLine(img draw.Image, line TextLine) {
 		width += int(adv.Round())
 	}
 
-	if line.Alignment == "center" {
-		d.Dot.X = fixed.Int26_6(line.X*64 - width/2)
-	} else if line.Alignment == "right" {
-		d.Dot.X = fixed.Int26_6(line.X*64 - width)
-	}
-
-	// 根据对齐方式调整X坐标
-	if line.Alignment == "center" {
-		d.Dot.X = fixed.Int26_6(line.X*64 - width/2)
-	} else if line.Alignment == "right" {
-		d.Dot.X = fixed.Int26_6(line.X*64 - width)
+	// 根据对齐方式调整X坐标（只计算一次）
+	switch strings.ToLower(line.Alignment) {
+	case "center":
+		d.Dot.X -= fixed.I(width / 2)
+	case "right":
+		d.Dot.X -= fixed.I(width)
 	}
 
 	// 绘制文本
 	d.DrawString(line.Text)
+}
+
+// 在内存中的图片上绘制多行文本（不进行文件读写）
+func AddTextToImageInPlace(dst draw.Image, textLines []TextLine) {
+	for _, line := range textLines {
+		addSingleLine(dst, line)
+	}
 }
 
 func testImageTextOverlay() {
