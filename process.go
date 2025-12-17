@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -100,7 +101,7 @@ func createRichMessage(data dto.Message, msg string, msgseq ...int) *dto.Message
 	if len(msgseq) > 0 {
 		msgSeq = uint32(msgseq[0])
 	}
-	return &dto.MessageToCreate{
+	m := &dto.MessageToCreate{
 		Timestamp: time.Now().UnixMilli(),
 		MsgType:   dto.RichMediaMsg,
 		Content:   fmt.Sprint(msg),
@@ -108,6 +109,7 @@ func createRichMessage(data dto.Message, msg string, msgseq ...int) *dto.Message
 		MsgID:     data.ID,
 		MsgSeq:    msgSeq,
 	}
+	return m
 }
 func createImgMessage(data dto.Message, picContent []byte) *dto.RichMediaMessage {
 	return &dto.RichMediaMessage{
@@ -142,10 +144,130 @@ func isCommandMatch(input string, cmdLists ...[]string) bool {
 	return false
 }
 
+func parseEAIDFromInput(input string) string {
+	parts := strings.SplitN(input, " ", 2)
+	if len(parts) > 1 {
+		return strings.TrimSpace(parts[1])
+	}
+	return ""
+}
+func normalizeInput(input string) string {
+	s := strings.TrimSpace(strings.ToLower(input))
+	s = regexp.MustCompile(`\s+`).ReplaceAllString(s, " ")
+	return s
+}
+func sendText(p Processor, isGroup bool, groupID string, userID string, msg dto.APIMessage) error {
+	if isGroup {
+		return p.sendGroupReply(context.Background(), groupID, msg)
+	}
+	return p.sendC2CReply(context.Background(), userID, msg)
+}
+func handleBind(p Processor, qqUser *dto.User, EAID string, base dto.Message, isGroup bool, groupID string, userID string) error {
+	if EAID == "" {
+		if isGroup {
+			return sendText(p, true, groupID, "", createMessage(base, "请提供有效的 EAID（必须为EA平台中的用户名，不可使用Steam名称）\n格式为 /a绑定 <EAID>\n例如如：/a绑定 MDY_KaLe"))
+		}
+		return sendText(p, false, "", userID, createMessage(base, "请提供有效的 EAID，格式为 /a绑定 <EAID>"))
+	}
+	playerJson, err := apexapi.GetPlayerData(EAID)
+	if err != nil {
+		return sendText(p, isGroup, groupID, userID, createMessage(base, fmt.Sprint("绑定失败，查询信息时发送错误\n", err)))
+	}
+	var playerData map[string]interface{}
+	if err := json.Unmarshal([]byte(playerJson), &playerData); err != nil {
+		return sendText(p, isGroup, groupID, userID, createMessage(base, fmt.Sprint("绑定失败，查询信息时发送错误，请稍后再试\n", fmt.Sprintf("解析玩家数据出错: %v\n", err))))
+	}
+	rankScore := 0
+	if g, ok := playerData["global"].(map[string]interface{}); ok {
+		if r, ok := g["rank"].(map[string]interface{}); ok {
+			if v, ok := r["rankScore"].(float64); ok {
+				rankScore = int(v)
+			}
+		}
+	}
+	if rankScore == 0 {
+		if r, ok := playerData["rank"].(map[string]interface{}); ok {
+			if v, ok := r["rankScore"].(float64); ok {
+				rankScore = int(v)
+			}
+		}
+	}
+	uid := ""
+	if g, ok := playerData["global"].(map[string]interface{}); ok {
+		if v, ok := g["uid"].(string); ok {
+			uid = v
+		}
+	}
+	bindingData := apexapi.PlayerBindingData{
+		QQ:             qqUser.ID,
+		EAID:           EAID,
+		EAUID:          uid,
+		LastUpdateTime: time.Now(),
+		LastRankScore:  rankScore,
+	}
+	apexapi.Players.Set(qqUser.ID, bindingData)
+	if err := apexapi.Players.SaveBindingRecords(); err != nil {
+		return sendText(p, isGroup, groupID, userID, createMessage(base, fmt.Sprintf("保存绑定记录失败：%v", err)))
+	}
+	return sendText(p, isGroup, groupID, userID, createMessage(base, fmt.Sprintf("绑定成功！您的 EAID 是 %s", EAID)))
+}
+func requireEAIDOrBinding(userID string, EAID string) (string, bool, int, time.Time, bool) {
+	if EAID != "" {
+		return EAID, false, 0, time.Time{}, true
+	}
+	bindingData, exists := apexapi.Players.Get(userID)
+	if !exists {
+		return "", false, 0, time.Time{}, false
+	}
+	return bindingData.EAID, true, bindingData.LastRankScore, bindingData.LastUpdateTime, true
+}
+func handlePlayerQuery(p Processor, qqUser *dto.User, EAID string, base dto.Message, isGroup bool, groupID string, userID string) error {
+	eaid, bind, lastScore, lastUpdateTime, ok := requireEAIDOrBinding(qqUser.ID, EAID)
+	if !ok {
+		if isGroup {
+			return sendText(p, true, groupID, "", createMessage(base, "您尚未绑定 EAID，请使用 /a绑定 <EAID> 进行绑定"))
+		}
+		return sendText(p, false, "", userID, createMessage(base, "您尚未绑定 EAID，请使用 /a绑定 <EAID> 进行绑定"))
+	}
+	dataStr, err := apexapi.GetPlayerData(eaid)
+	if err != nil {
+		return sendText(p, isGroup, groupID, userID, genErrMessage(base, err))
+	}
+	if len(dataStr) == 0 {
+		return sendText(p, isGroup, groupID, userID, genErrMessage(base, fmt.Errorf("获取到空的玩家数据")))
+	}
+	var msg string
+	if bind {
+		msg = apexapi.DisplayPlayerData(dataStr, apexapi.DisplayChangedOption{
+			LastScore: lastScore,
+			LastTime:  lastUpdateTime,
+		})
+	} else {
+		msg = apexapi.DisplayPlayerData(dataStr)
+	}
+	if bind {
+		if rank, _ := apexapi.GetPlayerRank(dataStr); rank > 0 {
+			bindingData, _ := apexapi.Players.Get(qqUser.ID)
+			bindingData.LastRankScore = rank
+			bindingData.LastUpdateTime = time.Now()
+			apexapi.Players.Set(qqUser.ID, bindingData)
+		}
+	}
+	return sendText(p, isGroup, groupID, userID, createMessage(base, msg))
+}
+func helpMessage() string {
+	var b strings.Builder
+	b.WriteString("以下为指令示例（其中[]中的表示可选项）：\n")
+	b.WriteString("获取当前轮换地图：@机器人 [/a]地图\n")
+	b.WriteString("绑定/换绑EA账号：@机器人 [/a]绑定 EAID,如@机器人 绑定 kasaa\n")
+	b.WriteString("查询绑定的EA账号数据：@机器人 [/a]查询\n")
+	b.WriteString("获取区服对应中英文对照：@机器人 [/a]区服\n")
+	return b.String()
+}
+
 // ProcessGroupMessage 回复群消息
 func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageData) error {
-	// 提前 trim 输入
-	input = strings.TrimSpace(input)
+	input = normalizeInput(input)
 	var (
 		mapCmds    = []string{"地图", "map"}
 		playerCmds = []string{"查询", "player"}
@@ -153,86 +275,18 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		serverCmds = []string{"区服", "server"}
 		helpCmds   = []string{"帮助", "help"}
 	)
-	// 获取当前用户信息
 	var qqUser *dto.User
 	if data.Author != nil && data.Author.ID != "" {
 		qqUser = data.Author
 	}
-	// 提前构造 message 对象
 	msgBase := dto.Message(*data)
 
-	// 统一处理绑定命令
 	if isCommandMatch(input, bindCmds) {
-		// 提取 EAID 并进行绑定操作
-		EAID, UID := "", ""
-		// 检查是否有空格分隔符
-		parts := strings.SplitN(input, " ", 2)
-		if len(parts) > 1 {
-			EAID = strings.TrimSpace(parts[1])
-		}
-
-		if EAID == "" {
-			replyMsg := createMessage(msgBase, "请提供有效的 EAID（必须为EA平台中的用户名，不可使用Steam名称）\n格式为 /a绑定 <EAID>\n例如如：/a绑定 MDY_KaLe")
-			_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
-			return nil
-		}
-		playerJson, err := apexapi.GetPlayerData(EAID)
-		if err != nil {
-			replyMsg := createMessage(msgBase, fmt.Sprint("绑定失败，查询信息时发送错误\n", err))
-			_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
-			return nil
-		}
-		var playerData map[string]interface{}
-		err = json.Unmarshal([]byte(playerJson), &playerData)
-		if err != nil {
-			str := fmt.Sprintf("解析玩家数据出错: %v\n", err)
-			replyMsg := createMessage(msgBase, fmt.Sprint("绑定失败，查询信息时发送错误，请稍后再试\n", str))
-			_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
-			return nil
-		}
-		global, ok := playerData["global"].(map[string]interface{})
-		if !ok {
-			log.Println("playerData[\"global\"] 类型断言失败")
-			return nil
-		}
-		rankData, ok := global["rank"].(map[string]interface{})
-		rankScore := 0
-		if ok {
-			rankScore = int(rankData["rankScore"].(float64))
-		}
-		// log.Printf("玩家数据: %v", playerData)
-
-		UID, ok = global["uid"].(string)
-		if !ok {
-			log.Println("global[\"uid\"] 类型断言失败 或 不存在")
-			return nil
-		}
-
-		// 更新绑定数据
-		bindingData := apexapi.PlayerBindingData{
-			QQ:             qqUser.ID,
-			EAID:           EAID,
-			EAUID:          UID,
-			LastUpdateTime: time.Now(),
-			LastRankScore:  rankScore,
-		}
-		apexapi.Players.Set(qqUser.ID, bindingData)
-
-		// 保存到文件
-		if err := apexapi.Players.SaveBindingRecords(); err != nil {
-			log.Printf("保存绑定记录失败：%v\n", err)
-			replyMsg := createMessage(msgBase, fmt.Sprintf("保存绑定记录失败：%v", err))
-			_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
-			return nil
-		}
-
-		// 返回成功提示
-		replyMsg := createMessage(msgBase, fmt.Sprintf("绑定成功！您的 EAID 是 %s", EAID))
-		_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
+		EAID := parseEAIDFromInput(input)
+		_ = handleBind(p, qqUser, EAID, msgBase, true, data.GroupID, "")
 		return nil
 	}
 
-	// 地图查询命令统一处理
 	if isCommandMatch(input, mapCmds) {
 		log.Println("处理地图查询命令")
 		mapResultPath, err := apexapi.GetMapResult()
@@ -241,7 +295,6 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 			return err
 		}
 
-		// 读取图片字节数据
 		err, shouldReturn := p.GetImgAndSendToGroup(mapResultPath, msgBase, data)
 		if shouldReturn {
 			return err
@@ -250,11 +303,9 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		log.Printf("发送地图图片成功")
 		return nil
 	}
-	// 区服查询命令统一处理
 	if isCommandMatch(input, serverCmds) {
 		log.Println("处理区服查询命令")
 
-		// 读取图片字节数据
 		err, shouldReturn := p.GetImgAndSendToGroup("asset/Static/Server.png", msgBase, data)
 		if shouldReturn {
 			return err
@@ -264,86 +315,17 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		return nil
 	}
 
-	// 玩家查询命令
 	if isCommandMatch(input, playerCmds) {
-		EAID := ""
-		var (
-			lastScore      int
-			lastUpdateTime time.Time
-		)
-		bind := false
-		// 检查是否有空格分隔符
-		parts := strings.SplitN(input, " ", 2)
-		if len(parts) > 1 {
-			EAID = strings.TrimSpace(parts[1])
-		}
-		// 如果没有输入 EAID，尝试从绑定中获取
-		if EAID == "" {
-			bindingData, exists := apexapi.Players.Get(qqUser.ID)
-			if !exists {
-				errMsg := "您尚未绑定 EAID，请使用 /a绑定 <EAID> 进行绑定"
-				replyMsg := createMessage(msgBase, errMsg)
-				if sendErr := p.sendGroupReply(context.Background(), data.GroupID, replyMsg); sendErr != nil {
-					log.Printf("发送绑定提示失败: %v", sendErr)
-				}
-				return nil
-			}
-			EAID = bindingData.EAID
-			bind = true
-			lastScore = bindingData.LastRankScore
-			lastUpdateTime = bindingData.LastUpdateTime
-			log.Println("处理玩家查询命令,绑定EAID=", EAID)
-		} else {
-			log.Println("处理玩家查询命令,EAID=", EAID)
-		}
-
-		dataStr, err := apexapi.GetPlayerData(EAID)
-		if err != nil {
-			_ = p.sendGroupReply(context.Background(), data.GroupID, genErrMessage(msgBase, err))
-			return nil
-		}
-
-		// 增加对 dataStr 的有效性检查
-		if len(dataStr) == 0 {
-			_ = p.sendGroupReply(context.Background(), data.GroupID, genErrMessage(msgBase, fmt.Errorf("获取到空的玩家数据")))
-			return nil
-		}
-		var msg string
-		if bind {
-			msg = apexapi.DisplayPlayerData(dataStr, apexapi.DisplayChangedOption{
-				LastScore: lastScore,
-				LastTime:  lastUpdateTime,
-			})
-		} else {
-			msg = apexapi.DisplayPlayerData(dataStr)
-		}
-		if bind {
-			rank, _ := apexapi.GetPlayerRank(dataStr)
-			bindingData, _ := apexapi.Players.Get(qqUser.ID)
-			bindingData.LastRankScore = rank
-			bindingData.LastUpdateTime = time.Now()
-			apexapi.Players.Set(qqUser.ID, bindingData)
-		}
-		replyMsg := createMessage(msgBase, msg)
-
-		if err := p.sendGroupReply(context.Background(), data.GroupID, replyMsg); err != nil {
-			log.Printf("发送回复消息失败: %v", err)
-			return err
-		}
+		EAID := parseEAIDFromInput(input)
+		_ = handlePlayerQuery(p, qqUser, EAID, msgBase, true, data.GroupID, "")
 		return nil
 	}
 	if isCommandMatch(input, helpCmds) {
-		helpInfo := "以下为指令示例（其中[]中的表示可选项）：\n"
-		helpInfo += "获取当前轮换地图：@机器人 [/a]地图\n"
-		helpInfo += "绑定/换绑EA账号：@机器人 [/a]绑定 EAID,如@机器人 绑定 kasaa\n"
-		helpInfo += "查询绑定的EA账号数据：@机器人 [/a]查询\n"
-		helpInfo += "获取区服对应中英文对照：@机器人 [/a]区服\n"
-		replyMsg := createMessage(msgBase, helpInfo)
+		replyMsg := createMessage(msgBase, helpMessage())
 		_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
 		return nil
 	}
 
-	// 其他指令或默认行为
 	msg := generateDemoMessage(input, msgBase)
 	if err := p.sendGroupReply(context.Background(), data.GroupID, msg); err != nil {
 		log.Printf("发送默认回复失败: %v", err)
@@ -375,166 +357,29 @@ func (p Processor) GetImgAndSendToGroup(mapResultPath string, msgBase dto.Messag
 
 // ProcessC2CMessage 回复C2C消息
 func (p Processor) ProcessC2CMessage(input string, data *dto.WSC2CMessageData) error {
-	// 获取当前用户信息
+	input = normalizeInput(input)
 	var qqUser *dto.User
 	userID := ""
 	if data.Author != nil && data.Author.ID != "" {
 		userID = data.Author.ID
 		qqUser = data.Author
 	}
-	// 提前 trim 输入
-	input = strings.TrimSpace(input)
 	var (
-		// mapCmds    = []string{"地图", "map"}
 		playerCmds = []string{"查询", "player"}
 		bindCmds   = []string{"绑定", "bind"}
-		// helpCmds   = []string{"帮助", "help"}
 	)
 
-	// 提前构造 message 对象
 	msgBase := dto.Message(*data)
 
-	// 统一处理绑定命令
 	if isCommandMatch(input, bindCmds) {
-		// 提取 EAID 并进行绑定操作
-		EAID := ""
-		parts := strings.SplitN(input, " ", 2)
-		if len(parts) > 1 {
-			EAID = strings.TrimSpace(parts[1])
-		}
-
-		if EAID == "" {
-			replyMsg := createMessage(msgBase, "请提供有效的 EAID，格式为 /a绑定 <EAID>")
-			_ = p.sendC2CReply(context.Background(), userID, replyMsg)
-			return nil
-		}
-		playerJson, err := apexapi.GetPlayerData(EAID)
-		if err != nil {
-			replyMsg := createMessage(msgBase, fmt.Sprint("绑定失败，查询信息时发送错误\n", err))
-			_ = p.sendC2CReply(context.Background(), userID, replyMsg)
-			return nil
-		}
-		var playerData map[string]interface{}
-		err = json.Unmarshal([]byte(playerJson), &playerData)
-		if err != nil {
-			str := fmt.Sprintf("解析玩家数据出错: %v\n", err)
-			replyMsg := createMessage(msgBase, fmt.Sprint("绑定失败，查询信息时发送错误\n", str))
-			_ = p.sendC2CReply(context.Background(), userID, replyMsg)
-			return nil
-		}
-
-		rankData, ok := playerData["rank"].(map[string]interface{})
-		rankScore := 0
-		if ok {
-			rankScore = int(rankData["rankScore"].(float64))
-		}
-
-		// 更新绑定数据
-		bindingData := apexapi.PlayerBindingData{
-			QQ:             qqUser.ID,
-			EAID:           EAID,
-			LastUpdateTime: time.Now(),
-			LastRankScore:  rankScore,
-		}
-		apexapi.Players.Set(qqUser.ID, bindingData)
-
-		// 保存到文件
-		if err := apexapi.Players.SaveBindingRecords(); err != nil {
-			log.Printf("保存绑定记录失败：%v\n", err)
-			replyMsg := createMessage(msgBase, fmt.Sprintf("保存绑定记录失败：%v", err))
-			_ = p.sendC2CReply(context.Background(), userID, replyMsg)
-			return nil
-		}
-
-		// 返回成功提示
-		replyMsg := createMessage(msgBase, fmt.Sprintf("绑定成功！您的 EAID 是 %s", EAID))
-		_ = p.sendC2CReply(context.Background(), userID, replyMsg)
+		EAID := parseEAIDFromInput(input)
+		_ = handleBind(p, qqUser, EAID, msgBase, false, "", userID)
 		return nil
 	}
 
-	// TODO 完成地图命令
-	// // 地图查询命令统一处理
-	// if isCommandMatch(input, mapCmds) {
-	// 	log.Println("处理地图查询命令")
-	// 	mapResultPath, err := apexapi.GetMapResult()
-	// 	if err != nil {
-	// 		log.Print("[ApexQueryMap] ", err)
-	// 		return err
-	// 	}
-
-	// 	// 读取图片字节数据
-	// 	qrContent, err := os.ReadFile(mapResultPath)
-	// 	if err != nil {
-	// 		botlog.Warnf("读取地图图片失败: %v", err)
-	// 		replyMsg := createMessage(msgBase, fmt.Sprintf("读取地图图片失败：%v", err))
-	// 		if sendErr := p.sendC2CReply(context.Background(), userID, replyMsg); sendErr != nil {
-	// 			log.Printf("发送错误消息失败: %v", sendErr)
-	// 		}
-	// 		return nil
-	// 	}
-
-	// 	imgRichMsg := createRichMessage(msgBase, "")
-	// 	err = p.sendGroupImgDataReply(context.Background(), userID, qrContent, imgRichMsg)
-	// 	if err != nil {
-	// 		botlog.Errorf("自建func发送地图图片失败: %v", err)
-	// 		return nil
-	// 	}
-
-	// 	log.Printf("发送地图图片成功")
-	// 	return nil
-	// }
-
-	// 玩家查询命令
 	if isCommandMatch(input, playerCmds) {
-		EAID := ""
-		bind := false
-		// 检查是否有空格分隔符
-		parts := strings.SplitN(input, " ", 2)
-		if len(parts) > 1 {
-			EAID = strings.TrimSpace(parts[1])
-		}
-		log.Println("处理玩家查询命令,EAID=", EAID)
-		// 如果没有输入 EAID，尝试从绑定中获取
-		if EAID == "" {
-			bindingData, exists := apexapi.Players.Get(qqUser.ID)
-			if !exists {
-				errMsg := "您尚未绑定 EAID，请使用 /a绑定 <EAID> 进行绑定"
-				replyMsg := createMessage(msgBase, errMsg)
-				if sendErr := p.sendC2CReply(context.Background(), data.GroupID, replyMsg); sendErr != nil {
-					log.Printf("发送绑定提示失败: %v", sendErr)
-				}
-				return nil
-			}
-			EAID = bindingData.EAID
-			bind = true
-		}
-
-		dataStr, err := apexapi.GetPlayerData(EAID)
-		if err != nil {
-			_ = p.sendC2CReply(context.Background(), userID, genErrMessage(msgBase, err))
-			return nil
-		}
-
-		// 增加对 dataStr 的有效性检查
-		if len(dataStr) == 0 {
-			_ = p.sendC2CReply(context.Background(), userID, genErrMessage(msgBase, fmt.Errorf("获取到空的玩家数据")))
-			return nil
-		}
-
-		msg := apexapi.DisplayPlayerData(dataStr)
-		if bind {
-			rank, _ := apexapi.GetPlayerRank(dataStr)
-			bindingData, _ := apexapi.Players.Get(qqUser.ID)
-			bindingData.LastRankScore = rank
-			bindingData.LastUpdateTime = time.Now()
-			apexapi.Players.Set(qqUser.ID, bindingData)
-		}
-		replyMsg := createMessage(msgBase, msg)
-
-		if err := p.sendC2CReply(context.Background(), userID, replyMsg); err != nil {
-			log.Printf("发送回复消息失败: %v", err)
-			return err
-		}
+		EAID := parseEAIDFromInput(input)
+		_ = handlePlayerQuery(p, qqUser, EAID, msgBase, false, "", userID)
 		return nil
 	}
 	msg := generateDemoMessage(input, dto.Message(*data))
