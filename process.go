@@ -340,6 +340,7 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 		helpInfo += "获取区服对应中英文对照：@机器人 [/a]区服\n"
 		replyMsg := createMessage(msgBase, helpInfo)
 		_ = p.sendGroupReply(context.Background(), data.GroupID, replyMsg)
+		return nil
 	}
 
 	// 其他指令或默认行为

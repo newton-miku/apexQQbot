@@ -12,6 +12,12 @@ import (
 	"time"
 
 	"github.com/newton-miku/apexQQbot/tools"
+	botlog "github.com/tencent-connect/botgo/log"
+)
+
+var (
+	legendsTranslator *tools.Translator
+	legendsDictPath   = "./asset/legends.json"
 )
 
 // GetData 发起API请求并处理响应
@@ -147,14 +153,7 @@ func DisplayPlayerData(data string, change ...DisplayChangedOption) string {
 			}
 		}
 	}
-	legendsNamePath := "asset/legends.json"
-	// 创建翻译器
-	legendTrans, err := tools.NewTranslator(legendsNamePath)
-	if err != nil {
-		log.Printf("初始化翻译器失败：%v\n", err)
-	}
-	defer legendTrans.Close()
-	legendName := legendTrans.Translate(selectedLegend["LegendName"].(string))
+	legendName := GetLegendName(selectedLegend["LegendName"].(string))
 	output.WriteString(fmt.Sprintf("\n当前选择的传奇: %s\n", legendName))
 
 	output.WriteString("传奇数据:\n")
@@ -169,6 +168,19 @@ func DisplayPlayerData(data string, change ...DisplayChangedOption) string {
 	output.WriteString("=========================\n")
 
 	return output.String()
+}
+
+func GetLegendName(legendName string) string {
+	if legendsTranslator == nil {
+		// 创建翻译器
+		legendTrans, err := tools.NewTranslator(legendsDictPath)
+		if err != nil {
+			botlog.Debugf("初始化翻译器失败：%v\n", err)
+			return legendName
+		}
+		legendsTranslator = legendTrans
+	}
+	return legendsTranslator.Translate(legendName)
 }
 
 func GetPlayerRank(data string) (int, error) {
