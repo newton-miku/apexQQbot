@@ -41,7 +41,7 @@ func (p Processor) ProcessInlineSearch(interaction *dto.WSInteractionData) error
 	}
 	search := &dto.SearchInputResolved{}
 	if err := json.Unmarshal(interaction.Data.Resolved, search); err != nil {
-		log.Println(err)
+		botlog.Errorf("解析搜索参数失败: %v", err)
 		return err
 	}
 	if search.Keyword != "test" {
@@ -66,7 +66,7 @@ func (p Processor) ProcessInlineSearch(interaction *dto.WSInteractionData) error
 	}
 	body, _ := json.Marshal(searchRsp)
 	if err := p.api.PutInteraction(context.Background(), interaction.ID, string(body)); err != nil {
-		log.Println("api call putInteractionInlineSearch  error: ", err)
+		botlog.Errorf("发送内联搜索回复失败: %v", err)
 		return err
 	}
 	return nil
@@ -169,35 +169,14 @@ func handleBind(p Processor, qqUser *dto.User, EAID string, base dto.Message, is
 		}
 		return sendText(p, false, "", userID, createMessage(base, "请提供有效的 EAID，格式为 /a绑定 <EAID>"))
 	}
-	playerJson, err := apexapi.GetPlayerData(EAID)
+	player, err := apexapi.GetPlayerData(context.Background(), EAID)
 	if err != nil {
 		return sendText(p, isGroup, groupID, userID, createMessage(base, fmt.Sprint("绑定失败，查询信息时发送错误\n", err)))
 	}
-	var playerData map[string]interface{}
-	if err := json.Unmarshal([]byte(playerJson), &playerData); err != nil {
-		return sendText(p, isGroup, groupID, userID, createMessage(base, fmt.Sprint("绑定失败，查询信息时发送错误，请稍后再试\n", fmt.Sprintf("解析玩家数据出错: %v\n", err))))
-	}
-	rankScore := 0
-	if g, ok := playerData["global"].(map[string]interface{}); ok {
-		if r, ok := g["rank"].(map[string]interface{}); ok {
-			if v, ok := r["rankScore"].(float64); ok {
-				rankScore = int(v)
-			}
-		}
-	}
-	if rankScore == 0 {
-		if r, ok := playerData["rank"].(map[string]interface{}); ok {
-			if v, ok := r["rankScore"].(float64); ok {
-				rankScore = int(v)
-			}
-		}
-	}
-	uid := ""
-	if g, ok := playerData["global"].(map[string]interface{}); ok {
-		if v, ok := g["uid"].(string); ok {
-			uid = v
-		}
-	}
+
+	rankScore := int(player.Global.Rank.RankScore)
+	uid := fmt.Sprintf("%v", player.Global.UID)
+
 	bindingData := apexapi.PlayerBindingData{
 		QQ:             qqUser.ID,
 		EAID:           EAID,
@@ -229,24 +208,26 @@ func handlePlayerQuery(p Processor, qqUser *dto.User, EAID string, base dto.Mess
 		}
 		return sendText(p, false, "", userID, createMessage(base, "您尚未绑定 EAID，请使用 /a绑定 <EAID> 进行绑定"))
 	}
-	dataStr, err := apexapi.GetPlayerData(eaid)
+	player, err := apexapi.GetPlayerData(context.Background(), eaid)
 	if err != nil {
 		return sendText(p, isGroup, groupID, userID, genErrMessage(base, err))
 	}
-	if len(dataStr) == 0 {
+	if player == nil {
 		return sendText(p, isGroup, groupID, userID, genErrMessage(base, fmt.Errorf("获取到空的玩家数据")))
 	}
+
 	var msg string
 	if bind {
-		msg = apexapi.DisplayPlayerData(dataStr, apexapi.DisplayChangedOption{
+		msg = apexapi.FormatPlayerData(player, apexapi.DisplayChangedOption{
 			LastScore: lastScore,
 			LastTime:  lastUpdateTime,
 		})
 	} else {
-		msg = apexapi.DisplayPlayerData(dataStr)
+		msg = apexapi.FormatPlayerData(player)
 	}
+
 	if bind {
-		if rank, _ := apexapi.GetPlayerRank(dataStr); rank > 0 {
+		if rank, _ := apexapi.GetPlayerRank(player); rank > 0 {
 			bindingData, _ := apexapi.Players.Get(qqUser.ID)
 			bindingData.LastRankScore = rank
 			bindingData.LastUpdateTime = time.Now()
@@ -288,10 +269,9 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 	}
 
 	if isCommandMatch(input, mapCmds) {
-		log.Println("处理地图查询命令")
 		mapResultPath, err := apexapi.GetMapResult()
 		if err != nil {
-			log.Print("[ApexQueryMap] ", err)
+			botlog.Warnf("获取地图轮换失败: %v", err)
 			return err
 		}
 
@@ -300,18 +280,14 @@ func (p Processor) ProcessGroupMessage(input string, data *dto.WSGroupATMessageD
 			return err
 		}
 
-		log.Printf("发送地图图片成功")
 		return nil
 	}
 	if isCommandMatch(input, serverCmds) {
-		log.Println("处理区服查询命令")
-
 		err, shouldReturn := p.GetImgAndSendToGroup("asset/Static/Server.png", msgBase, data)
 		if shouldReturn {
 			return err
 		}
 
-		log.Printf("发送服务器图片成功")
 		return nil
 	}
 
@@ -341,7 +317,7 @@ func (p Processor) GetImgAndSendToGroup(mapResultPath string, msgBase dto.Messag
 		botlog.Warnf("读取地图图片失败: %v", err)
 		replyMsg := createMessage(msgBase, "读取地图图片失败，请反馈至开发人员")
 		if sendErr := p.sendGroupReply(context.Background(), data.GroupID, replyMsg); sendErr != nil {
-			log.Printf("发送错误消息失败: %v", sendErr)
+			botlog.Warnf("发送错误消息失败: %v", sendErr)
 		}
 		return nil, true
 	}
@@ -390,10 +366,9 @@ func (p Processor) ProcessC2CMessage(input string, data *dto.WSC2CMessageData) e
 }
 
 func generateDemoMessage(input string, data dto.Message) *dto.MessageToCreate {
-	log.Printf("收到指令: %+v", input)
 	msg := ""
 	if len(input) > 0 {
-		msg += "您输入的指令指令\"" + input + "\"似乎有误，请使用帮助获取指令手册"
+		msg += "您输入的指令\"" + input + "\"似乎有误，请使用帮助获取指令手册"
 	}
 	for _, _v := range data.Attachments {
 		msg += ",收到文件类型:" + _v.ContentType
@@ -420,12 +395,10 @@ func (p Processor) ProcessFriend(wsEventType string, data *dto.WSC2CFriendData) 
 	var content string
 	switch strings.ToLower(wsEventType) {
 	case strings.ToLower(string(dto.EventC2CFriendAdd)):
-		log.Println("添加好友")
 		content = fmt.Sprintf("ID为 %s 的用户添加机器人为好友", data.OpenID)
 	case strings.ToLower(string(dto.EventC2CFriendDel)):
-		log.Println("删除好友")
+		return nil
 	default:
-		log.Println(wsEventType)
 		return nil
 	}
 	replyMsg.Content = content
@@ -435,7 +408,7 @@ func (p Processor) ProcessFriend(wsEventType string, data *dto.WSC2CFriendData) 
 		replyMsg,
 	)
 	if err != nil {
-		log.Println(err)
+		botlog.Errorf("发送好友通知失败: %v", err)
 		return err
 	}
 	return nil

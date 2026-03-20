@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	botlog "github.com/tencent-connect/botgo/log"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/font/opentype"
@@ -100,13 +99,11 @@ func loadFontFace(fontPath string, size float64) (font.Face, error) {
 
 	fontBytes, err := os.ReadFile(fontPath)
 	if err != nil {
-		botlog.Warnf("读取字体文件失败：%v", err)
 		return basicfont.Face7x13, nil
 	}
 
 	ttFont, err := opentype.Parse(fontBytes)
 	if err != nil {
-		botlog.Warnf("解析字体失败：%v", err)
 		return basicfont.Face7x13, nil
 	}
 
@@ -116,7 +113,6 @@ func loadFontFace(fontPath string, size float64) (font.Face, error) {
 		Hinting: font.HintingFull,
 	})
 	if err != nil {
-		botlog.Warnf("创建字体Face失败：%v", err)
 		return basicfont.Face7x13, nil
 	}
 

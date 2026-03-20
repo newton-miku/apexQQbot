@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -29,14 +28,14 @@ func (p Processor) setEmoji(ctx context.Context, channelID string, messageID str
 		},
 	)
 	if err != nil {
-		log.Println(err)
+		botlog.Warnf("设置表情失败: %v", err)
 	}
 }
 
 func (p Processor) setPins(ctx context.Context, channelID, msgID string) {
 	_, err := p.api.AddPins(ctx, channelID, msgID)
 	if err != nil {
-		log.Println(err)
+		botlog.Warnf("设置置顶失败: %v", err)
 	}
 }
 
@@ -45,22 +44,21 @@ func (p Processor) setAnnounces(ctx context.Context, data *dto.WSATMessageData) 
 		ctx, data.ChannelID,
 		&dto.ChannelAnnouncesToCreate{MessageID: data.ID},
 	); err != nil {
-		log.Println(err)
+		botlog.Warnf("设置公告失败: %v", err)
 	}
 }
 
 func (p Processor) sendChannelReply(ctx context.Context, channelID string, toCreate *dto.MessageToCreate) error {
 	if _, err := p.api.PostMessage(ctx, channelID, toCreate); err != nil {
-		log.Println(err)
+		botlog.Errorf("发送频道消息失败: %v", err)
 		return err
 	}
 	return nil
 }
 
 func (p Processor) sendGroupReply(ctx context.Context, groupID string, toCreate dto.APIMessage) error {
-	log.Printf("EVENT ID:%v", toCreate.GetEventID())
 	if _, err := p.api.PostGroupMessage(ctx, groupID, toCreate); err != nil {
-		log.Println(err)
+		botlog.Errorf("发送群消息失败: %v", err)
 		return err
 	}
 	return nil
@@ -78,12 +76,9 @@ func (p Processor) SendGroupFileByBase64(ctx context.Context, groupOpenID string
 
 	media, err := p.UploadPicToGroup(ctx, groupOpenID, payload)
 	if err != nil {
-		log.Println(err)
+		botlog.Errorf("上传文件失败: %v", err)
 		return nil, err
 	}
-
-	log.Println("bin MediaInfo:", string(media.FileInfo))
-	botlog.Debug("bin MediaInfo:", string(media.FileInfo))
 
 	return media, err
 }
@@ -145,11 +140,10 @@ func (p Processor) sendGroupImgDataReply(ctx context.Context, groupID string, fi
 	}
 	fileInfo, err := p.UploadPicToGroup(ctx, groupID, payload)
 	if err != nil {
-		log.Println("[sendGroupImgDataReply]  UploadPicToGroup Err:", err, " fileInfo:", fileInfo)
-		botlog.Debug("UploadPicToGroup Err:", err, " fileInfo:", fileInfo)
+		botlog.Errorf("上传图片失败: %v", err)
 		return err
 	}
-	botlog.Debug("bin MediaInfo:")
+
 	toSend.(*dto.MessageToCreate).Media = fileInfo
 	toSend.(*dto.MessageToCreate).Timestamp = time.Now().UnixMilli()
 	_, err = p.api.PostGroupMessage(ctx, groupID, toSend)
@@ -166,25 +160,24 @@ func (p Processor) sendGroupImgDataReply(ctx context.Context, groupID string, fi
 func (p Processor) sendGroupImgReply(ctx context.Context, groupID string, toCreate dto.APIMessage, toSend dto.APIMessage) error {
 	fileInfo, err := p.api.PostGroupMessage(ctx, groupID, toCreate)
 	if err != nil {
-		log.Println(err)
+		botlog.Errorf("发送图片消息失败: %v", err)
 		return err
 	}
 	toSend.(*dto.MessageToCreate).Media.FileInfo = fileInfo.FileInfo
 	_, err = p.api.PostGroupMessage(ctx, groupID, toSend)
 	if err != nil {
-		log.Println(err)
+		botlog.Errorf("发送图片消息失败: %v", err)
 		return err
 	}
 	return nil
 }
 
 func (p Processor) sendC2CReply(ctx context.Context, userID string, toCreate dto.APIMessage) error {
-	log.Printf("EVENT ID:%v", toCreate.GetEventID())
 	if _, err := p.api.PostC2CMessage(ctx, userID, toCreate); err != nil {
 		if strings.Contains(err.Error(), "消息被去重，请检查请求msgseq") {
 			return nil
 		}
-		log.Println(err)
+		botlog.Errorf("发送C2C消息失败: %v", err)
 		return err
 	}
 	return nil
