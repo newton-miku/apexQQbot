@@ -17,8 +17,8 @@
     "control_canyonlands_caustic": "诸王峡谷(控制)",
     "control_tropics_barometer": "晴雨表(控制)",
     "freedm_tdm_skulltown": "骷髅镇(团队竞技)",
-    "freedm_gungame_wall": "高墙(枪王)",
-    "control_desertlands_siphon": "熔岩虹吸(枪王)",
+    "freedm_gungame_wall": "高墙(子弹时间)",
+    "control_desertlands_siphon": "熔岩虹吸(控制)",
     "freedm_tdm_overflow": "熔岩流(团队竞技)",
     "freedm_swat_overflow": "熔岩流(死亡之眼-无护盾)",
     "freedm_gungame_skulltown": "骷髅镇(子弹时间)",
@@ -32,6 +32,7 @@
     "control_divided_moon": "残月(控制)",
     "control_olympus_labs": "哈蒙德实验室(控制)",
     "edistrict_rotation": "电力区",
-    "freedm_tdm_amps": "雷击站(团队死斗)",
-    "control_barometer": "晴雨表(控制)"
+    "freedm_tdm_amps": "宙斯站(团队死斗)",
+    "control_barometer": "晴雨表(控制)",
+    "freedm_gungame_wattson": "沃特森塔(子弹时间)"
 }
