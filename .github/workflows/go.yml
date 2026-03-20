@@ -1,48 +1,48 @@
-name: Go
+name: CI
 
 on:
   push:
-    tags: '*'
+    branches: ['**']
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5.5.0
+    - name: Setup Go
+      uses: actions/setup-go@v5
       with:
-        go-version: '^1.24'
+        go-version-file: 'go.mod'
+        cache: true
 
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v4.2.2
+    - name: Verify environment
+      run: |
+        go version
+        go env
 
-    - name: Cache go module
-      uses: actions/cache@v4.2.3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+    - name: Install dependencies
+      run: go mod download
 
-    - name: Build
+    - name: Build releases
       if: startsWith(github.ref, 'refs/tags/')
-      env:
-          NAME: nali
-          BINDIR: bin
       run: make releases
 
     - name: Upload Release
-      uses: softprops/action-gh-release@v2.3.2
       if: startsWith(github.ref, 'refs/tags/')
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
         files: bin/*
-      
-    - uses: actions/upload-artifact@v4.6.2
-      if: startsWith(github.ref, 'refs/tags/')
+
+    - name: Upload build artifacts
+      if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      uses: actions/upload-artifact@v4
       with:
-        name: build
+        name: build-artifacts
         path: bin
