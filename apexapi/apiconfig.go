@@ -10,12 +10,12 @@ import (
 )
 
 type Config struct {
-	AppID     string `yaml:"app_id"`
-	AppSecret string `yaml:"app_secret"`
+	AppID     string `yaml:"appid"`
+	AppSecret string `yaml:"secret"`
 }
 
 type API struct {
-	ApiToken string
+	ApiToken string `yaml:"apitoken"`
 }
 
 var (
@@ -119,11 +119,4 @@ func GetConfigError() error {
 	configMx.RLock()
 	defer configMx.RUnlock()
 	return configErr
-}
-
-func maskAppID(appID string) string {
-	if len(appID) <= 4 {
-		return "****"
-	}
-	return appID[:2] + "****" + appID[len(appID)-2:]
 }
