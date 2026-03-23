@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"io"
 	"net/http"
@@ -365,14 +366,19 @@ func CacheAllImage(mapRotate MapRotate) {
 
 // ============ 图片生成 ============
 
-// FormatDuration 格式化持续时间为 "HH:mm:ss"
+// FormatDuration 格式化持续时间为 "Xd HH:mm:ss"
 func FormatDuration(d time.Duration) string {
 	d = d.Truncate(time.Second)
+	days := d / (24 * time.Hour)
+	d -= days * 24 * time.Hour
 	h := d / time.Hour
 	d -= h * time.Hour
 	m := d / time.Minute
 	d -= m * time.Minute
 	s := d / time.Second
+	if days > 0 {
+		return fmt.Sprintf("%dd %02d:%02d:%02d", days, h, m, s)
+	}
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
 }
 
@@ -403,6 +409,9 @@ func GenerateMapImage() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("获取地图轮换信息失败: %w", err)
 	}
+
+	// 获取商店倒计时
+	storeCountdown, _ := GetStoreCountdown()
 
 	assetDir, err := GetAssetPath()
 	if err != nil {
@@ -461,10 +470,76 @@ func GenerateMapImage() (string, error) {
 		images = append(images, dst)
 	}
 
-	// 竖向拼接三张模式图片
-	finalImg := image.NewRGBA(image.Rect(0, 0, 960, 900))
+	// 创建最终图片（添加倒计时栏在顶部）
+	const headerHeight = 80
+	finalImg := image.NewRGBA(image.Rect(0, 0, 960, 900+headerHeight))
+
+	// 绘制倒计时栏背景
+	for y := 0; y < headerHeight; y++ {
+		for x := 0; x < 960; x++ {
+			finalImg.Set(x, y, color.RGBA{30, 30, 40, 255})
+		}
+	}
+
+	// 添加倒计时文本 - 布局：赛季倒计时：[时间]                        赛季结束：MM-DD HH:mm
+	headerLines := []tools.TextLine{}
+
+	// 如果有有效的倒计时信息
+	if storeCountdown != nil && storeCountdown.IsValid() {
+		// 左侧标签
+		headerLines = append(headerLines, tools.TextLine{
+			Text:     "赛季倒计时：",
+			Size:     32,
+			X:        30,
+			Y:        50,
+			FontPath: fontPath,
+			Color:    color.RGBA{200, 200, 200, 255},
+		})
+		// 倒计时时间（紧跟标签后面）
+		headerLines = append(headerLines, tools.TextLine{
+			Text:     storeCountdown.String(),
+			Size:     42,
+			X:        260,
+			Y:        55,
+			FontPath: fontPath,
+			Color:    color.RGBA{255, 200, 100, 255},
+		})
+		// 赛季结束时间放在最右侧
+		endStr := storeCountdown.Deadline.Format("01-02 15:04")
+		headerLines = append(headerLines, tools.TextLine{
+			Text:      fmt.Sprintf("赛季结束：%s", endStr),
+			Size:      28,
+			X:         930,
+			Y:         50,
+			FontPath:  fontPath,
+			Color:     color.RGBA{200, 200, 200, 255},
+			Alignment: "right",
+		})
+	} else {
+		// 无数据时显示
+		headerLines = append(headerLines, tools.TextLine{
+			Text:     "赛季倒计时：",
+			Size:     32,
+			X:        30,
+			Y:        50,
+			FontPath: fontPath,
+			Color:    color.RGBA{200, 200, 200, 255},
+		})
+		headerLines = append(headerLines, tools.TextLine{
+			Text:     "暂无信息",
+			Size:     32,
+			X:        260,
+			Y:        50,
+			FontPath: fontPath,
+			Color:    color.RGBA{150, 150, 150, 255},
+		})
+	}
+
+	tools.AddTextToImageInPlace(finalImg, headerLines)
+
+	// 竖向拼接三张模式图片（在倒计时栏下方）
 	for i, img := range images {
-		dstRect := image.Rect(0, i*300, 960, (i+1)*300)
+		dstRect := image.Rect(0, headerHeight+i*300, 960, headerHeight+(i+1)*300)
 		draw.CatmullRom.Scale(finalImg, dstRect, img, img.Bounds(), draw.Over, nil)
 	}
 
