@@ -63,7 +63,7 @@ func (p *PlayerData) Init() error {
 		}
 
 		// 连接数据库
-		db, err := sql.Open("sqlite3", dbFile)
+		db, err := sql.Open("sqlite", dbFile)
 		if err != nil {
 			p.initErr = fmt.Errorf("打开数据库失败: %w", err)
 			return
