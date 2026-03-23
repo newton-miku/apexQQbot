@@ -84,8 +84,9 @@ func TestGenerateMapImage(t *testing.T) {
 		t.Fatalf("图片解码失败: %v", err)
 	}
 	b := img.Bounds()
-	if b.Dx() != 960 || b.Dy() != 900 {
-		t.Fatalf("图片尺寸不符合预期，得到: %dx%d，期望: 960x900", b.Dx(), b.Dy())
+	// 添加赛季倒计时栏后，高度增加80px（900 + 80 = 980）
+	if b.Dx() != 960 || b.Dy() != 980 {
+		t.Fatalf("图片尺寸不符合预期，得到: %dx%d，期望: 960x980", b.Dx(), b.Dy())
 	}
 }
 
@@ -98,6 +99,11 @@ func TestGetMapResult(t *testing.T) {
 	}
 	confPath := filepath.Join(basePath, "conf", "config.yaml")
 	apexapi.StartLoadConfig(confPath)
+
+	// 预检查：地图接口可达性
+	if _, err := apexapi.GetMapRotate(); err != nil {
+		t.Skipf("跳过：地图接口不可达或超时：%v", err)
+	}
 
 	// 调用集成结果函数
 	path, err := apexapi.GetMapResult()
@@ -123,7 +129,8 @@ func TestGetMapResult(t *testing.T) {
 		t.Fatalf("图片解码失败: %v", err)
 	}
 	b := img.Bounds()
-	if b.Dx() != 960 || b.Dy() != 900 {
-		t.Fatalf("图片尺寸不符合预期，得到: %dx%d，期望: 960x900", b.Dx(), b.Dy())
+	// 添加赛季倒计时栏后，高度增加80px（900 + 80 = 980）
+	if b.Dx() != 960 || b.Dy() != 980 {
+		t.Fatalf("图片尺寸不符合预期，得到: %dx%d，期望: 960x980", b.Dx(), b.Dy())
 	}
 }
