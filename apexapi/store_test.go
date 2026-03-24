@@ -31,3 +31,5 @@ func TestGetStoreCountdown(t *testing.T) {
 	t.Logf("剩余时间: %s", countdown.String())
 	t.Logf("是否有效: %v", countdown.IsValid())
 }
+
+// go test -v .\apexapi\ -run TestGetStoreCountdown

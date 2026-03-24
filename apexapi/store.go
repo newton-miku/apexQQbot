@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -69,6 +70,11 @@ var (
 	storeCacheExpiresAt  time.Time
 	storeCacheLock       sync.RWMutex
 	storeCacheDuration   = 24 * time.Hour // 缓存1天
+
+	// 动态 nonce 相关
+	storeNonce     string
+	storeNonceTime time.Time
+	storeNonceLock sync.Mutex
 )
 
 // GetStoreCountdown 获取商店倒计时（带缓存）
@@ -86,13 +92,54 @@ func GetStoreCountdown() (*StoreCountdown, error) {
 	return GetStoreCountdownFromAPI()
 }
 
+// getStoreNonce 获取有效的 nonce（带缓存）
+func getStoreNonce() (string, error) {
+	storeNonceLock.Lock()
+	defer storeNonceLock.Unlock()
+
+	// nonce 有效期约 12-24 小时，这里保守使用 10 小时
+	if storeNonce != "" && time.Since(storeNonceTime) < 10*time.Hour {
+		return storeNonce, nil
+	}
+
+	// 从主页获取新的 nonce
+	client := GetHTTPClient(15 * time.Second)
+	resp, err := client.Get("https://apexitemstore.com")
+	if err != nil {
+		return "", fmt.Errorf("fetch homepage failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read body failed: %w", err)
+	}
+
+	// 从 HTML 中提取 nonce
+	// 格式: "nonce":"19cc681867"
+	re := regexp.MustCompile(`"nonce"\s*:\s*"([^"]+)"`)
+	matches := re.FindSubmatch(body)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("nonce not found in response")
+	}
+
+	storeNonce = string(matches[1])
+	storeNonceTime = time.Now()
+	return storeNonce, nil
+}
 // GetStoreCountdownFromAPI 从 API 获取商店倒计时
 func GetStoreCountdownFromAPI() (*StoreCountdown, error) {
+	// 获取动态 nonce
+	nonce, err := getStoreNonce()
+	if err != nil {
+		return nil, fmt.Errorf("获取 nonce 失败: %w", err)
+	}
+
 	client := GetHTTPClient(15 * time.Second)
 
 	// 构建请求 URL
-	reqURL := fmt.Sprintf("%s?action=scd_query_next_event&smartcountdown_nonce=61372ce8a4&unique_ts=%d&deadline=&import_config=scd_easy_recurrence%%3A%%3A2&countdown_to_end=0&countup_limit=0",
-		storeAPIURL, time.Now().UnixMilli())
+	reqURL := fmt.Sprintf("%s?action=scd_query_next_event&smartcountdown_nonce=%s&unique_ts=%d&deadline=&import_config=scd_easy_recurrence%%3A%%3A2&countdown_to_end=0&countup_limit=0",
+		storeAPIURL, nonce, time.Now().UnixMilli())
 
 	req, err := http.NewRequestWithContext(context.Background(), "GET", reqURL, nil)
 	if err != nil {
@@ -126,6 +173,15 @@ func GetStoreCountdownFromAPI() (*StoreCountdown, error) {
 	body, err := io.ReadAll(limitReader)
 	if err != nil {
 		return nil, ErrReadResponseFailed
+	}
+
+	// 检查 nonce 是否失效
+	if string(body) == "-1" || len(body) < 2 {
+		// nonce 失效，清除缓存并重试
+		storeNonceLock.Lock()
+		storeNonce = ""
+		storeNonceLock.Unlock()
+		return GetStoreCountdownFromAPI()
 	}
 
 	var apiResp StoreEventResponse

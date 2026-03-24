@@ -134,3 +134,5 @@ func TestGetMapResult(t *testing.T) {
 		t.Fatalf("图片尺寸不符合预期，得到: %dx%d，期望: 960x980", b.Dx(), b.Dy())
 	}
 }
+
+// go test -v .\apexapi\ -run TestGetMapResult

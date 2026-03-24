@@ -24,10 +24,10 @@ import (
 // ============ 公共路径工具 ============
 
 var (
-	exeDir     string
-	repoRoot   string
-	assetDir   string
-	assetPath  sync.Once
+	exeDir      string
+	repoRoot    string
+	assetDir    string
+	assetPath   sync.Once
 	pathInitErr error
 )
 
@@ -127,11 +127,11 @@ func getMapRotateData(mr MapRotate) []MapRotateInfo {
 // ============ 缓存与线程安全 ============
 
 var (
-	cachedMapRotate   MapRotate
-	cacheExpiresAt    time.Time
-	mapCacheLock      sync.RWMutex
-	mapCacheOnce      sync.Once
-	mapCacheInitErr   error
+	cachedMapRotate MapRotate
+	cacheExpiresAt  time.Time
+	mapCacheLock    sync.RWMutex
+	mapCacheOnce    sync.Once
+	mapCacheInitErr error
 )
 
 // GetEarliestEndTime 获取所有 Current Map 中最早的 EndTime
@@ -231,11 +231,11 @@ func ForceRefreshMapCache() (MapRotate, error) {
 // ============ 翻译器管理 ============
 
 var (
-	mapTranslator    *tools.Translator
-	modeTranslator   *tools.Translator
-	translatorLock   sync.RWMutex
-	mapDictPath      string
-	modeDictPath     string
+	mapTranslator  *tools.Translator
+	modeTranslator *tools.Translator
+	translatorLock sync.RWMutex
+	mapDictPath    string
+	modeDictPath   string
 )
 
 // GetMapName 获取地图中文名（线程安全）
@@ -481,14 +481,14 @@ func GenerateMapImage() (string, error) {
 		}
 	}
 
-	// 添加倒计时文本 - 布局：赛季倒计时：[时间]                        赛季结束：MM-DD HH:mm
+	// 添加倒计时文本 - 布局：商店更新倒计时：[时间]                        商店更新：MM-DD HH:mm
 	headerLines := []tools.TextLine{}
 
 	// 如果有有效的倒计时信息
 	if storeCountdown != nil && storeCountdown.IsValid() {
 		// 左侧标签
 		headerLines = append(headerLines, tools.TextLine{
-			Text:     "赛季倒计时：",
+			Text:     "商店更新倒计时：",
 			Size:     32,
 			X:        30,
 			Y:        50,
@@ -499,15 +499,15 @@ func GenerateMapImage() (string, error) {
 		headerLines = append(headerLines, tools.TextLine{
 			Text:     storeCountdown.String(),
 			Size:     42,
-			X:        260,
+			X:        320,
 			Y:        55,
 			FontPath: fontPath,
 			Color:    color.RGBA{255, 200, 100, 255},
 		})
-		// 赛季结束时间放在最右侧
+		// 商店更新时间放在最右侧
 		endStr := storeCountdown.Deadline.Format("01-02 15:04")
 		headerLines = append(headerLines, tools.TextLine{
-			Text:      fmt.Sprintf("赛季结束：%s", endStr),
+			Text:      fmt.Sprintf("商店更新：%s", endStr),
 			Size:      28,
 			X:         930,
 			Y:         50,
@@ -518,7 +518,7 @@ func GenerateMapImage() (string, error) {
 	} else {
 		// 无数据时显示
 		headerLines = append(headerLines, tools.TextLine{
-			Text:     "赛季倒计时：",
+			Text:     "商店更新还有：",
 			Size:     32,
 			X:        30,
 			Y:        50,
