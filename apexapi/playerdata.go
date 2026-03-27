@@ -116,6 +116,7 @@ func (p *PlayerData) Get(qqID string) (PlayerBindingData, bool) {
 	defer cancel()
 
 	var binding PlayerBindingData
+	var timestamp int64
 	err := p.db.QueryRowContext(ctx, `
 		SELECT qq_id, ea_id, ea_uid, last_update_time, last_rank_score
 		FROM player_bindings WHERE qq_id = ?
@@ -123,7 +124,7 @@ func (p *PlayerData) Get(qqID string) (PlayerBindingData, bool) {
 		&binding.QQ,
 		&binding.EAID,
 		&binding.EAUID,
-		&binding.LastUpdateTime,
+		&timestamp,
 		&binding.LastRankScore,
 	)
 
@@ -134,6 +135,7 @@ func (p *PlayerData) Get(qqID string) (PlayerBindingData, bool) {
 		return PlayerBindingData{}, false
 	}
 
+	binding.LastUpdateTime = time.Unix(timestamp, 0)
 	return binding, true
 }
 
