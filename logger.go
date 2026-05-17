@@ -208,11 +208,18 @@ func (f FileLogger) Fatalf(format string, v ...any) {
 	os.Exit(1)
 }
 
+const maxLogLen = 2000
+
 func output(v ...any) string {
 	pc, file, line, _ := runtime.Caller(3)
 	file = filepath.Base(file)
 	funcName := strings.TrimPrefix(filepath.Ext(runtime.FuncForPC(pc).Name()), ".")
 
-	logFormat := "%s:%d:%s " + fmt.Sprint(v...)
+	msg := fmt.Sprint(v...)
+	if len(msg) > maxLogLen {
+		msg = msg[:maxLogLen] + "...[truncated]"
+	}
+
+	logFormat := "%s:%d:%s " + msg
 	return fmt.Sprintf(logFormat, file, line, funcName)
 }
