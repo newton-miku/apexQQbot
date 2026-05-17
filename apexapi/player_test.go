@@ -2,6 +2,7 @@ package apexapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,4 +29,28 @@ func TestGetPlayerData(t *testing.T) {
 	}
 	log.Debugf("玩家名称: %s", res.Global.Name)
 	log.Debugf("段位: %s %d", res.Global.Rank.RankName, res.Global.Rank.RankDiv)
+
+	// 打印传奇信息，检查数据结构
+	if selected, ok := res.Legends["selected"]; ok {
+		log.Debugf("传奇名称: '%s'", selected.LegendName)
+		log.Debugf("传奇数据项数: %d", len(selected.Data))
+		for i, stat := range selected.Data {
+			log.Debugf("  数据 %d: %s = %v", i, stat.Name, stat.Value)
+		}
+	} else {
+		log.Debugf("未找到 selected 传奇")
+	}
+
+	// 打印原始 legends 结构
+	log.Debugf("Legends 键: %v", func() []string {
+		keys := make([]string, 0, len(res.Legends))
+		for k := range res.Legends {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+
+	// 打印原始 JSON 查看实际字段名
+	raw, _ := json.MarshalIndent(res.Legends, "", "  ")
+	log.Debugf("Legends 原始 JSON:\n%s", string(raw))
 }

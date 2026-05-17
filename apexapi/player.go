@@ -44,8 +44,8 @@ func getLegendsTranslator() *tools.Translator {
 
 // PlayerResponse API 响应结构
 type PlayerResponse struct {
-	Global  GlobalInfo            `json:"global"`
-	Legends map[string]LegendInfo `json:"legends"`
+	Global  GlobalInfo                `json:"global"`
+	Legends map[string]LegendSelected `json:"legends"`
 }
 
 // GlobalInfo 全局玩家信息
@@ -204,14 +204,14 @@ func FormatPlayerData(player *PlayerResponse, change ...DisplayChangedOption) st
 
 	// 当前传奇
 	if selected, ok := player.Legends["selected"]; ok {
-		legendName := GetLegendName(selected.Selected.LegendName)
+		legendName := GetLegendName(selected.LegendName)
 		output.WriteString(fmt.Sprintf("\n当前选择的传奇: %s\n", legendName))
 	}
 
 	// 传奇数据
 	output.WriteString("传奇数据:\n")
 	if selected, ok := player.Legends["selected"]; ok {
-		for i, stat := range selected.Selected.Data {
+		for i, stat := range selected.Data {
 			output.WriteString(fmt.Sprintf("  %d. %s: %v\n", i+1, stat.Name, stat.Value))
 		}
 	}
