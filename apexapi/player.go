@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,12 +18,18 @@ import (
 // 线程安全的翻译器初始化
 var (
 	legendsTranslator *tools.Translator
-	legendsDictPath   = "./asset/legends.json"
+	legendsDictPath   string
 	translatorOnce    sync.Once
 )
 
 func getLegendsTranslator() *tools.Translator {
 	translatorOnce.Do(func() {
+		if assetDir != "" {
+			legendsDictPath = filepath.Join(assetDir, "legends.json")
+		} else {
+			legendsDictPath = "./asset/legends.json"
+		}
+
 		legendTrans, err := tools.NewTranslator(legendsDictPath)
 		if err != nil {
 			// 静默失败，使用默认行为
@@ -43,11 +50,11 @@ type PlayerResponse struct {
 
 // GlobalInfo 全局玩家信息
 type GlobalInfo struct {
-	Name     string    `json:"name"`
-	UID      any       `json:"uid"`       // 支持 string 或 int64
-	Platform string    `json:"platform"`
-	Level    float64   `json:"level"`
-	Rank     RankInfo  `json:"rank"`
+	Name     string   `json:"name"`
+	UID      any      `json:"uid"` // 支持 string 或 int64
+	Platform string   `json:"platform"`
+	Level    float64  `json:"level"`
+	Rank     RankInfo `json:"rank"`
 }
 
 // RankInfo 段位信息
@@ -64,9 +71,9 @@ type LegendInfo struct {
 
 // LegendSelected 当前选择的传奇
 type LegendSelected struct {
-	LegendName string                 `json:"LegendName"`
-	Data      []LegendStatItem       `json:"data"`
-	ImgAssets LegendImgAssets        `json:"ImgAssets"`
+	LegendName string           `json:"LegendName"`
+	Data       []LegendStatItem `json:"data"`
+	ImgAssets  LegendImgAssets  `json:"ImgAssets"`
 }
 
 // LegendImgAssets 传奇图片资源
